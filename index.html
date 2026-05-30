@@ -263,7 +263,7 @@ button{font-family:inherit;cursor:pointer}
   </div>
   <input type="file" id="upFile" accept=".txt,.md" style="display:none" onchange="document.getElementById('upFileInfo').textContent=this.files[0]?'✅ '+this.files[0].name:''">
   <div id="upFileInfo" style="font-size:0.78em;color:var(--s);margin-top:4px"></div>
-  <div class="acts"><button class="btn" onclick="closeUp()">取消</button><button class="btn a" onclick="doUp()">📤 上传</button></div>
+  <div class="acts"><button class="btn" onclick="closeUp()">取消</button><button class="btn a" onclick="doUp(this)">📤 上传</button></div>
 </div></div>
 
 <script>
@@ -542,7 +542,9 @@ function openUp(){
   document.getElementById('upM').classList.add('on');
 }
 function closeUp(){document.getElementById('upM').classList.remove('on');}
-async function doUp(){
+let uploading=false;
+async function doUp(btn){
+  if(uploading)return;
   const title=document.getElementById('upTitle').value.trim();
   const author=document.getElementById('upAuthor').value.trim()||'佚名';
   const genre=document.getElementById('upGenre').value;
@@ -550,30 +552,37 @@ async function doUp(){
   if(!title){alert('请输入书名');return;}
   if(!file){alert('请选择文件');return;}
 
+  uploading=true;
+  if(btn){btn.disabled=true;btn.textContent='⏳ 读取文件中...';}
   try{
     const text=await new Promise((ok,fail)=>{
       const r=new FileReader();r.onload=e=>ok(e.target.result);r.onerror=()=>fail(new Error('读取失败'));r.readAsText(file,'UTF-8');
     });
-    if(!text||text.trim().length<20){alert('文件内容过短');return;}
+    if(!text||text.trim().length<20){alert('文件内容过短');uploading=false;if(btn){btn.disabled=false;btn.textContent='📤 上传';}return;}
 
+    if(btn)btn.textContent='⏳ 分段处理中...';
     const bookId='u-'+Date.now();
     const paras=smartSplit(text);
-    if(paras.length===0){alert('未能识别段落');return;}
+    if(paras.length===0){alert('未能识别段落');uploading=false;if(btn){btn.disabled=false;btn.textContent='📤 上传';}return;}
 
-    // 往Supabase存储（全文存入localStorage兜底，数据库只存元数据）
     localStorage.setItem('rb_raw_'+bookId,text);
     if(db){
-      await db.from('books').insert({id:bookId,title,author,genre,cover:'📖',description:'用户 '+profile.username+' 上传',word_count:text.length,uploader_id:session.user.id});
-      // 批量存储前50段作为快速加载的缓存
-      const batch=paras.slice(0,50).map((p,i)=>({book_id:bookId,paragraph_index:i,language:'en',version:1,author_name:'AI',content:p}));
-      await db.from('translations').insert(batch);
+      if(btn)btn.textContent='⏳ 存入云端 1/2...';
+      await db.from('books').insert({id:bookId,title,author,genre,cover:'📖',description:text.substring(0,5000),word_count:text.length,uploader_id:session.user.id});
+      for(let i=0;i<paras.length;i+=100){
+        if(btn)btn.textContent='⏳ 存入云端 '+(Math.min(i+100,paras.length))+'/'+paras.length+' 段...';
+        const batch=paras.slice(i,i+100).map((p,j)=>({book_id:bookId,paragraph_index:i+j,language:'zh',version:1,author_name:'AI',content:p}));
+        await db.from('translations').insert(batch);
+      }
     }
 
-    // 同时存本地——译文留空，等待社区翻译
     PRELOAD[bookId]={title,author,genre,cover:'📖',desc:'用户上传 · 等待社区翻译',wordCount:text.length,zh:paras,en:paras.map(()=>'')};
-    closeUp();renderLib();
+    if(btn){btn.textContent='✅ 上传完成';}
+    setTimeout(()=>{closeUp();renderLib();},600);
     alert('✅ 上传成功！'+paras.length+'段，已加入资料库。\n点击段落旁的"🌐翻译"按钮逐段翻译，或等待社区成员贡献。');
   }catch(e){alert('上传失败：'+e.message);}
+  uploading=false;
+  if(btn){btn.disabled=false;btn.textContent='📤 上传';}
 }
 
 // ============================================================
@@ -617,15 +626,25 @@ async function openB(id){
   let book=PRELOAD[id];
   // 如果不是预置书，从Supabase+localStorage加载
   if(!book){
-    // 优先从localStorage读取原始文本重建段落
-    const raw=localStorage.getItem('rb_raw_'+id);
-    if(raw){book={zh:smartSplit(raw),en:[],isUploaded:true};}
-    // 补充元数据
+    // 先从Supabase translations表重建全部段落（跨设备可靠）
     if(db){try{
       const{data:bData}=await db.from('books').select('*').eq('id',id).single();
-      if(bData){book=Object.assign(book||{},{title:bData.title,author:bData.author,genre:bData.genre,cover:bData.cover||'📖',desc:bData.description||'',wordCount:bData.word_count||0,isUploaded:true,uploaderId:bData.uploader_id});if(!book.zh)book.zh=[];if(!book.en)book.en=book.zh.map(()=>'');}
-    }catch(e){console.warn('Load meta failed:',e);}}
-    if(book)PRELOAD[id]=book;
+      if(bData){
+        const{data:tData}=await db.from('translations').select('*').eq('book_id',id).eq('language','zh').order('paragraph_index',{ascending:true});
+        const paras=[];if(tData){tData.forEach(t=>{paras[t.paragraph_index]=t.content;});}
+        const cleanParas=paras.filter(p=>p&&p.trim());
+        // 如果Supabase段落不全，用localStorage补
+        let zh=cleanParas;
+        if(zh.length===0||(bData.word_count>1000&&zh.length<10)){
+          const raw=localStorage.getItem('rb_raw_'+id);
+          if(raw){zh=smartSplit(raw);}
+        }
+        book={title:bData.title,author:bData.author,genre:bData.genre,cover:bData.cover||'📖',desc:bData.description||'',wordCount:bData.word_count||0,zh,en:zh.map(()=>''),isUploaded:true,uploaderId:bData.uploader_id};
+        PRELOAD[id]=book;
+      }
+    }catch(e){console.warn('Supabase load failed, trying localStorage:',e.message);}}
+    // Supabase失败时从localStorage兜底
+    if(!book){const raw=localStorage.getItem('rb_raw_'+id);if(raw){book={zh:smartSplit(raw),en:[],isUploaded:true};PRELOAD[id]=book;}}
   }
   if(!book){alert('书籍未找到');return;}
   curBook=book;curBook.id=id;
