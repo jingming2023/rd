@@ -66,6 +66,7 @@ button{font-family:inherit;cursor:pointer}
 .para .ptool button:hover{border-color:var(--a);color:var(--a)}
 .just-done{animation:fadeUp 0.4s ease-out}
 @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes collabPulse{0%,100%{box-shadow:0 2px 8px rgba(37,99,235,0.3)}50%{box-shadow:0 2px 16px rgba(37,99,235,0.55)}}
 
 /* 评论区 */
 .comments-section{margin-top:6px;padding-left:8px;border-left:2px solid var(--bd)}
@@ -130,10 +131,30 @@ button{font-family:inherit;cursor:pointer}
 
 <!-- 资料库 -->
 <div class="lib-page" id="libPage">
-  <h1>📚 语桥 ReadBridge</h1>
-  <div class="sub" style="font-size:1.05em;color:var(--a);font-weight:600;margin-bottom:6px">AI翻译初稿，社区一起打磨。每一本书的翻译，都因读者的参与而变得更好。</div>
-  <div class="sub" style="margin-bottom:10px">你在阅读时改进的每一段翻译，都会被所有读者看到、使用、再迭代。</div>
-  <div class="lib-tags">
+  <div style="text-align:center;padding:20px 0 8px">
+    <h1 style="font-size:2em;margin-bottom:6px">📖 语桥 ReadBridge</h1>
+    <div style="font-size:1.15em;color:var(--a);font-weight:700;margin-bottom:6px">像开源代码一样协作翻译每一本书</div>
+    <div style="font-size:0.9em;color:var(--s);margin-bottom:18px">AI提供初稿，社区持续打磨。翻译不是一次性的——它在一群人的手中变得更好。</div>
+    <!-- 用户引导 -->
+    <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:20px" id="heroCards">
+      <div style="background:var(--pbg);border:2px solid var(--bd);border-radius:14px;padding:16px 20px;width:200px;text-align:center;cursor:pointer;transition:all 0.2s" id="heroReader" onclick="event.stopPropagation();flashFirstBook()" onmouseover="this.style.borderColor='var(--a)';this.style.transform='translateY(-2px)'" onmouseout="this.style.borderColor='var(--bd)';this.style.transform='none'">
+        <div style="font-size:2em">📚</div>
+        <div style="font-weight:700;margin:4px 0">我是读者</div>
+        <div style="font-size:0.75em;color:var(--s)">打开一本书<br>中英双语对照阅读</div>
+      </div>
+      <div style="background:var(--pbg);border:2px solid var(--bd);border-radius:14px;padding:16px 20px;width:200px;text-align:center;cursor:pointer;transition:all 0.2s" id="heroTranslator" onclick="event.stopPropagation();openB('little-prince')" onmouseover="this.style.borderColor='var(--a)';this.style.transform='translateY(-2px)'" onmouseout="this.style.borderColor='var(--bd)';this.style.transform='none'">
+        <div style="font-size:2em">✏️</div>
+        <div style="font-weight:700;margin:4px 0">我是译者</div>
+        <div style="font-size:0.75em;color:var(--s)">改进AI翻译<br>帮助更多人读懂好书</div>
+      </div>
+      <div style="background:var(--pbg);border:2px solid var(--bd);border-radius:14px;padding:16px 20px;width:200px;text-align:center;cursor:pointer;transition:all 0.2s" id="heroUpload" onclick="event.stopPropagation();openUp()" onmouseover="this.style.borderColor='var(--a)';this.style.transform='translateY(-2px)'" onmouseout="this.style.borderColor='var(--bd)';this.style.transform='none'">
+        <div style="font-size:2em">📤</div>
+        <div style="font-weight:700;margin:4px 0">我想传书</div>
+        <div style="font-size:0.75em;color:var(--s)">上传文本文件<br>让社区一起翻译</div>
+      </div>
+    </div>
+  </div>
+  <div class="lib-tags" style="justify-content:center">
     <span class="on" onclick="filter('all',this)">全部</span>
     <span onclick="filter('名著',this)">📖 名著</span>
     <span onclick="filter('网文',this)">📱 网文</span>
@@ -608,6 +629,8 @@ async function openB(id){
   }
   if(!book){alert('书籍未找到');return;}
   curBook=book;curBook.id=id;
+  // 加载用户对该书的版本偏好
+  try{userActive=JSON.parse(localStorage.getItem('rb_active_'+id)||'{}');}catch(e){userActive={};}
   document.getElementById('libPage').style.display='none';
   document.getElementById('readerPage').classList.add('on');
   document.getElementById('rbTitle').textContent=curBook.title+' · '+curBook.author;
@@ -730,13 +753,29 @@ function subscribeRealtime(){
     .subscribe();
 }
 
+// 用户版本选择偏好（localStorage存储）
+let userActive={};
+
 function getActive(pi,lang){
   const k=pi+'-'+lang;
   const cloud=commVersions[k];
-  if(cloud&&cloud.length>0) return cloud[cloud.length-1]; // 最新版本
+  if(cloud&&cloud.length>0){
+    // 检查用户是否手动选择了某个版本
+    const uk=curBook?.id+'-'+pi+'-'+lang;
+    const chosen=userActive[uk];
+    if(chosen){const found=cloud.find(v=>v.version===chosen);if(found)return found;}
+    // 默认返回最新版本
+    return cloud[cloud.length-1];
+  }
   const pre=curBook[lang];
   if(pre&&pre[pi]) return {version:1,author_name:'AI',content:pre[pi]};
   return null;
+}
+
+function saveUserActive(pi,lang,ver){
+  const uk=curBook.id+'-'+pi+'-'+lang;
+  userActive[uk]=ver;
+  try{localStorage.setItem('rb_active_'+curBook.id,JSON.stringify(userActive));}catch(e){}
 }
 
 function getVersions(pi,lang){
@@ -760,8 +799,8 @@ function renderR(){
     const comments=commComments[i]||[];
     // 协作标记：有改进的段落显示醒目标记
     let collabTag='';
-    if(humanVs.length>0) collabTag=' <span style="background:var(--bbg);color:var(--bbt);font-size:0.7em;padding:1px 6px;border-radius:6px;font-weight:600;cursor:pointer" onclick="openVr('+i+')">👥'+humanVs.length+'人改进 v'+vs.length+'</span>';
-    else if(vs.length>1) collabTag=' <span style="background:var(--hl);color:var(--a);font-size:0.7em;padding:1px 6px;border-radius:6px;cursor:pointer" onclick="openVr('+i+')">v'+vs.length+'</span>';
+    if(humanVs.length>0) collabTag=' <span style="background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff;font-size:0.78em;padding:3px 10px;border-radius:10px;font-weight:700;cursor:pointer;box-shadow:0 2px 8px rgba(37,99,235,0.3);animation:collabPulse 2s ease-in-out infinite" onclick="openVr('+i+')" title="点击查看所有版本">👥 '+humanVs.length+'人改进 · v'+vs.length+'</span>';
+    else if(vs.length>1) collabTag=' <span style="background:var(--hl);color:var(--a);font-size:0.78em;padding:3px 10px;border-radius:10px;font-weight:600;cursor:pointer" onclick="openVr('+i+')">v'+vs.length+'</span>';
     let transContent;
     if(has&&v.content&&v.content.length>0){
       transContent=escapeHtml(v.content);
@@ -892,9 +931,11 @@ function openVr(i){
     const pre=curBook[curLang];
     if(pre&&pre[i]) displayVs=[{version:1,author_name:'AI',content:pre[i]}];
   }
-  document.getElementById('vrT').textContent='段落'+(i+1)+' · '+displayVs.length+'个版本';
+  const currentActive=getActive(i,curLang);
+  document.getElementById('vrT').textContent='段落'+(i+1)+' · '+displayVs.length+'个版本 · 当前显示：v'+(currentActive?currentActive.version:'?')+' ('+(currentActive?.author_name||'AI')+')';
   document.getElementById('vrL').innerHTML=displayVs.map(v=>{
-    return'<li onclick="setActiveV('+i+','+v.version+')"><div class="vh"><strong>'+escapeHtml(v.author_name)+'</strong><span>v'+v.version+'</span></div><div class="vt">'+escapeHtml(v.content.substring(0,400))+'</div></li>';
+    const isCur=currentActive&&v.version===currentActive.version;
+    return'<li onclick="setActiveV('+i+','+v.version+')" style="'+(isCur?'background:var(--hl);border-color:var(--a);border-width:2px':'')+'"><div class="vh"><strong>'+escapeHtml(v.author_name)+'</strong><span>v'+v.version+(isCur?' ← 当前显示':'')+'</span></div><div class="vt">'+escapeHtml(v.content.substring(0,400))+'</div></li>';
   }).join('');
   if(displayVs.length>=2){
     document.getElementById('vrDiff').style.display='block';
@@ -904,9 +945,12 @@ function openVr(i){
 }
 function closeVr(){document.getElementById('vrM').classList.remove('on');}
 async function setActiveV(pi,vn){
-  // 对于demo，版本切换仅做显示用途
-  await loadCloudVersions();
+  // 保存用户的版本选择
+  saveUserActive(pi,curLang,vn);
   closeVr();renderR();showReport();
+  // 临时提示
+  const el=document.querySelector('#rightC .para[data-i="'+pi+'"]');
+  if(el){el.classList.add('just-done');setTimeout(()=>el.classList.remove('just-done'),600);}
 }
 
 function simpleDiff(o,n){
@@ -928,6 +972,14 @@ function simpleDiff(o,n){
 // 9. 朗读
 // ============================================================
 function toggleTheme(){document.body.classList.toggle('dark');}
+function flashFirstBook(){
+  const cards=document.querySelectorAll('.book-card');
+  if(cards.length>0){
+    cards[0].scrollIntoView({behavior:'smooth'});
+    cards[0].style.boxShadow='0 0 0 5px var(--a)';
+    setTimeout(()=>cards[0].style.boxShadow='',800);
+  }
+}
 
 // 删除书籍
 async function deleteBook(){
@@ -962,7 +1014,7 @@ function escapeHtml(s){const d=document.createElement('div');d.textContent=s;ret
 // ============================================================
 document.addEventListener('DOMContentLoaded',async()=>{
   document.documentElement.style.setProperty('--fs','17px');
-  // 恢复session
+  // 首页引导卡片事件绑定
   if(db){
     try{const{data}=await db.auth.getSession();if(data.session){session=data.session;await loadProfile();}}catch(e){console.warn('Session restore failed');}
   }
