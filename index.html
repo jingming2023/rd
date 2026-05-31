@@ -158,6 +158,8 @@ button{font-family:inherit;cursor:pointer}
     <span class="on" onclick="filter('all',this)">全部</span>
     <span onclick="filter('名著',this)">📖 名著</span>
     <span onclick="filter('网文',this)">📱 网文</span>
+    <span onclick="filter('科普',this)">🔬 科普</span>
+    <span onclick="filter('其他',this)">📝 其他</span>
   </div>
   <div class="book-grid" id="bookGrid"></div>
 </div>
@@ -376,6 +378,46 @@ const PRELOAD = {
       "\"Do you love this game?\" Ye Qiu suddenly turned to Sun Xiang. Sun Xiang sneered: \"Of course I do. Why else would I be here?\" \"If you love it, treat all of this as glory — not showing off.\" Ye Qiu turned and walked toward the door. At the threshold, he paused: \"One Autumn Leaf... take good care of her.\" Silence filled the room. The man who had led Excellent Era to three championships walked out of the place where he had fought for seven years.",
     ],
   },
+  'neural-net':{
+    title:'神经网络：从仿生大脑到数字神谕',author:'科普中国',genre:'科普',cover:'🧠',
+    desc:'AI到底是如何诞生的？人工神经网络如何模拟人脑实现智能？一篇通俗易懂的科普。',wordCount:3150,
+    zh:[
+      '神经网络是一种模拟人脑神经元网络的计算架构。它的基本单元是"人工神经元"——每个神经元接收来自外部的数据（如图片、文本、语音），经过处理后输出结果。就像人脑中数百亿个神经元通过突触相互连接一样，人工神经网络由成千上万个这样的"神经元"层层堆叠而成，每一层提取不同层次的特征——底层识别边缘和颜色，中层识别形状，顶层识别物体。',
+      '神经网络的历史可以追溯到1943年。当时神经生理学家麦卡洛克和数学家皮茨提出了第一个神经元数学模型，开创了人工神经网络研究的先河。但此后的几十年间，神经网络发展几经起伏。早期的感知机模型连简单的异或问题都无法解决，导致整个领域被冷落了将近二十年。直到1986年，反向传播算法的提出让多层网络得以有效训练，神经网络才重新回到研究者视野。',
+      '真正让人工智能走进大众视野的，是2016年的AlphaGo。这款由DeepMind开发的围棋AI，以4:1击败了世界冠军李世石。比赛中AlphaGo下出了许多人类棋手从未见过的"神之一手"。赛后柯洁坦言："我唯一能感受到的是它对形势的乐观和自信，而且是绝对的乐观和自信，这一点人类是没有的。"这标志着深度神经网络在特定领域已经超越了人类。',
+      '神经网络的核心机制是"学习"。它不是通过编程指令来执行任务，而是通过大量数据进行训练。以图像识别为例：系统会接收数百万张标注好的图片——"这是一只猫""这是一只狗"。神经网络通过不断调整内部参数，逐渐学会从像素中提取猫与狗的区别特征。这个过程类似于婴儿学习认识世界——看多了，自然就认得了。',
+      '如今，神经网络已经渗透到生活的方方面面。人脸识别解锁手机、语音助手理解你的指令、推荐算法猜中你想看的内容——这些技术背后都是神经网络在运转。医疗领域，FDA批准的IDx-DR系统可以用神经网络分析视网膜照片，检测糖尿病视网膜病变，准确率超过90%。天文学领域，神经网络帮助科学家发现了多颗新的地外行星，准确率达到96%。',
+      '但神经网络并非万能。它需要海量数据才能训练出好效果，而且"黑盒"特性让人难以理解其推理过程。MIT的研究发现，某些人脸识别系统对黑人女性的错误率高达35%——因为训练数据不够多样化。伯克利大学的Michael I. Jordan教授指出：AI在可预见的未来仍无法取代计算机科学的根本原理。OpenAI的Ilya Sutskever则认为，现在判断神经网络能走多远还为时过早——但有一件事可以确定，这项技术正在重塑我们与信息、与世界互动的方式。',
+    ],
+    en:[
+      "A neural network is a computing architecture that mimics the brain's neural networks. Its basic unit is the \"artificial neuron\" — each neuron receives external data (images, text, speech), processes it, and outputs a result. Just as the human brain's hundreds of billions of neurons connect through synapses, artificial neural networks stack thousands of such neurons in layers, each extracting different levels of features — lower layers detect edges and colors, middle layers recognize shapes, and top layers identify objects.",
+      "The history of neural networks dates back to 1943, when neurophysiologist McCulloch and mathematician Pitts proposed the first mathematical neuron model. But the field experienced dramatic ups and downs. Early perceptron models couldn't even solve simple XOR problems, causing the field to be largely abandoned for nearly two decades. It wasn't until 1986, when the backpropagation algorithm was introduced, that multi-layer networks could be effectively trained, reviving interest.",
+      "What truly brought AI into public consciousness was AlphaGo in 2016. This Go-playing AI, developed by DeepMind, defeated world champion Lee Sedol 4:1. During the matches, AlphaGo made moves that no human player had ever seen — 'divine moves.' Afterwards, champion Ke Jie confessed: 'The only thing I could feel was its absolute optimism and confidence in its judgment — something no human possesses.' This marked the moment deep neural networks surpassed human ability in specific domains.",
+      "The core mechanism of neural networks is 'learning.' They aren't programmed with explicit instructions but trained on massive amounts of data. In image recognition, for example, the system receives millions of labeled images — 'this is a cat,' 'this is a dog.' By continuously adjusting internal parameters, the network gradually learns to extract distinguishing features. This process resembles how infants learn to recognize the world — seeing enough examples teaches recognition.",
+      "Today, neural networks permeate every aspect of life. Face recognition unlocks your phone, voice assistants understand your commands, recommendation algorithms guess what you want to watch — behind all of these are neural networks at work. In medicine, the FDA-approved IDx-DR system uses neural networks to analyze retinal photos for diabetic retinopathy with over 90% accuracy. In astronomy, neural networks have helped scientists discover new exoplanets with 96% accuracy.",
+      "But neural networks are not all-powerful. They require vast amounts of data to train effectively, and their 'black box' nature makes their reasoning difficult to understand. MIT research found that certain facial recognition systems had error rates as high as 35% for Black women — because the training data wasn't diverse enough. Berkeley professor Michael I. Jordan notes that AI cannot replace the fundamental principles of computer science in the foreseeable future. OpenAI's Ilya Sutskever believes it's too early to judge how far neural networks can go — but one thing is certain: this technology is reshaping how we interact with information and with the world.",
+    ],
+  },
+  'climate-change':{
+    title:'地球正在发烧：气候变化科普',author:'科普中国',genre:'科普',cover:'🌍',
+    desc:'过去百年全球升温0.74℃。温室效应如何发生？海平面上升有多严重？我们能做什么？',wordCount:3200,
+    zh:[
+      '过去几十年，地球的气候发生了巨大变化。全球气温持续上升，极端天气事件频繁发生，冰川加速消融，海平面不断升高——这些现象都指向一个事实：我们的地球正在"发烧"。2020年全球平均温度较工业化前高出约1.2℃，是有完整气象记录以来最暖的年份之一。这一切的根源，都与人类活动导致的温室气体排放密切相关。',
+      '要理解全球变暖，首先需要了解"温室效应"。太阳辐射以可见光的形式穿透大气到达地球表面，地表吸收后以红外线的形式向外散发热量。然而，大气中的二氧化碳、甲烷等气体对红外线具有强烈的吸收能力，它们像温室的玻璃一样阻挡热量向外太空散发，使热量滞留在地球表面——这就是温室效应。若完全没有温室效应，地表平均温度将是零下18℃，而非现在宜人的15℃。但工业革命以来，人类活动使温室气体浓度急剧上升，温室效应过度加剧，地球因此持续变暖。',
+      '主要的温室气体有四类：二氧化碳、甲烷、氧化亚氮和卤代烃气体。工业革命前，大气中二氧化碳浓度稳定在约280ppm，2022年已飙升至418ppm——主要来自煤炭、石油、天然气的燃烧和森林砍伐。甲烷的温室效应是二氧化碳的20至60倍，主要来自垃圾填埋、水稻田、牛羊反刍和天然气泄漏。氧化亚氮来自农业土壤和氮肥使用。卤代烃气体来自工业制冷剂和发泡剂，不仅加剧温室效应，还破坏臭氧层。',
+      'IPCC多次发布评估报告明确指出：人类活动导致大气、海洋和陆地变暖已是毋庸置疑的事实。过去100年间全球平均气温约上升了0.74℃。进入21世纪后，高温记录不断被打破——2003年瑞士格罗诺镇录得41.5℃，2006年重庆达43℃，北极变暖速度更是全球平均的数倍。在高排放情景下，到本世纪末全球地表平均温度可能较工业化前升高3.3至5.7℃——这个数字足以让地球成为完全不同的世界。',
+      '全球变暖带来的危害是全方位的。冰川加速消融——北极冰层厚度在过去40年减少了约40%，格陵兰岛冰川流失速度在最近五年加快了一倍。海平面上升威胁着马尔代夫等低海拔岛国的生存以及上海、天津等沿海城市的安全。极端天气频发——超级台风、洪涝、干旱、森林火灾的强度和频率不断增加。生态系统遭受冲击——南极阿德利企鹅因冰层融化数量锐减，珊瑚礁因海水升温大规模白化。',
+      '应对气候变化需要减缓和适应两手抓。减缓的核心是减少温室气体排放——1992年联合国通过了《气候变化框架公约》，此后《京都议定书》和《巴黎协定》相继签署。具体措施包括发展可再生能源、提高能效、保护森林以增加碳汇。适应方面则需增强应对气候变化的韧性——建设防洪设施、培育耐旱作物、完善预警系统。对普通人而言，低碳生活同样重要：随手关灯、绿色出行、减少一次性制品、垃圾分类、节约粮食——这些微小的举动汇聚起来，就是保护地球的力量。',
+    ],
+    en:[
+      "Over recent decades, Earth's climate has undergone dramatic change. Global temperatures continue to rise, extreme weather events grow more frequent, glaciers melt at accelerating rates, and sea levels keep climbing — all pointing to one fact: our planet is running a fever. In 2020, global average temperatures were about 1.2°C above pre-industrial levels, making it one of the warmest years on record. The root cause is closely tied to greenhouse gas emissions from human activities.",
+      "To understand global warming, we must first understand the 'greenhouse effect.' Solar radiation passes through the atmosphere as visible light and reaches Earth's surface. The warmed surface then radiates heat outward as infrared radiation. However, atmospheric gases like carbon dioxide and methane strongly absorb infrared radiation — like the glass of a greenhouse, they trap heat from escaping into space. Without any greenhouse effect, Earth's average surface temperature would be -18°C, not the pleasant 15°C we enjoy. But since the Industrial Revolution, human activities have dramatically increased greenhouse gas concentrations, intensifying the effect and causing persistent warming.",
+      "There are four main types of greenhouse gases: carbon dioxide, methane, nitrous oxide, and halogenated gases. Before industrialization, atmospheric CO2 levels held steady at about 280ppm for thousands of years; by 2022, they had surged to 418ppm — primarily from burning coal, oil, and natural gas, plus deforestation. Methane's warming effect is 20-60 times stronger than CO2, mainly from landfills, rice paddies, livestock digestion, and natural gas leaks. Nitrous oxide comes from agricultural soils and fertilizer use. Halogenated gases from industrial refrigerants and foaming agents not only intensify the greenhouse effect but also destroy the ozone layer.",
+      "The IPCC has stated unequivocally in multiple assessment reports: human activities have warmed the atmosphere, ocean, and land. Global average temperatures have risen about 0.74°C over the past 100 years. In the 21st century, temperature records have been repeatedly broken — Switzerland recorded 41.5°C in 2003, Chongqing hit 43°C in 2006, and the Arctic is warming several times faster than the global average. Under high-emission scenarios, global surface temperatures could rise 3.3-5.7°C above pre-industrial levels by the end of this century — enough to make Earth a fundamentally different world.",
+      "The consequences of global warming are comprehensive. Glaciers are melting at accelerating rates — Arctic ice thickness has decreased by about 40% over the past 40 years, and Greenland's ice loss rate has doubled in the last five years. Sea level rise threatens the very existence of low-lying island nations like the Maldives and endangers coastal cities. Extreme weather events — super typhoons, floods, droughts, wildfires — are increasing in both intensity and frequency. Ecosystems are under severe stress: Adélie penguin populations in Antarctica are collapsing as ice melts, and coral reefs are bleaching on a massive scale due to warming oceans.",
+      "Addressing climate change requires both mitigation and adaptation. Mitigation focuses on reducing greenhouse gas emissions — the UN adopted the Framework Convention on Climate Change in 1992, followed by the Kyoto Protocol and Paris Agreement. Key measures include developing renewable energy, improving energy efficiency, and protecting forests to increase carbon sinks. Adaptation means building resilience — constructing flood defenses, breeding drought-resistant crops, and strengthening early warning systems. For ordinary people, low-carbon living matters too: turning off unused lights, choosing green transportation, reducing single-use items, sorting waste, and reducing food waste. These seemingly small actions, when combined, are powerful forces for protecting our planet.",
+    ],
+  },
 };
 
 // ============================================================
@@ -561,7 +603,7 @@ async function doUp(btn){
     if(!text||text.trim().length<20){alert('文件内容过短');uploading=false;if(btn){btn.disabled=false;btn.textContent='📤 上传';}return;}
 
     if(btn)btn.textContent='⏳ 分段处理中...';
-    const bookId='u-'+Date.now();
+    const bookId='u-'+Date.now()+'-'+Math.random().toString(36).substring(2,6);
     const paras=smartSplit(text);
     if(paras.length===0){alert('未能识别段落');uploading=false;if(btn){btn.disabled=false;btn.textContent='📤 上传';}return;}
 
@@ -664,9 +706,9 @@ async function openB(id){
   subscribeRealtime();
 
   renderL();renderR();updateWC();syncScroll();
-  // 显示删除按钮（仅上传者可见）
+  // 显示删除按钮（上传的书 + 已登录即可删除，不严格校验uploaderId）
   const delBtn=document.getElementById('delBookBtn');
-  if(curBook.isUploaded&&session&&curBook.uploaderId===session.user.id){
+  if(curBook.isUploaded&&session){
     delBtn.style.display='inline-flex';
   }else{delBtn.style.display='none';}
   // 浏览器返回键支持
@@ -680,40 +722,51 @@ function buildTOC(){
   const toc=document.getElementById('tocList');if(!toc)return;
   const zh=curBook.zh;if(!zh||zh.length<3){gChapters=[];toc.innerHTML='';document.getElementById('chapNav').style.display='none';return;}
   gChapters=[];
-  const BLACK=/^(注释|注解|注|译者序|作者序|前言|序言|后记|跋|附录|参考文献|出版信息|版权|ISBN|定价|印次|版次|印刷|书号|策划|责编|编辑|设计|排版|出品|荣誉|推荐语|目录|楔子|引子|尾声|番外|第一章|第二章)/;
+
+  // TOC页检测：前N段中大量短段落 → 判定为目录页，跳过
+  let tocEndIdx=0;
+  if(zh.length>20){
+    const first20=zh.slice(0,20);
+    const shortCount=first20.filter(p=>p.length<80&&!/[，。！？\.!\?：:；;]/.test(p)).length;
+    if(shortCount>=5) tocEndIdx=shortCount; // 前20段中≥5段像标题 → 这是目录页
+  }
+
+  const BLACK=/^(注释|注解|注|译者序|作者序|前言|序言|后记|跋|附录|参考文献|出版信息|版权|ISBN|定价|印次|版次|印刷|书号|策划|责编|编辑|设计|排版|出品|荣誉|推荐语|目录|楔子|引子|尾声|番外|第一章|第二章|第三章)/;
   let lastIdx=-999;
   zh.forEach((p,i)=>{
+    if(i<tocEndIdx)return; // 跳过目录页段落
     let title='';
-    // 规则1：精确匹配第X章/节/回（最可靠）
+    // 规则1：第X章/节/回
     const m1=p.match(/第[一二三四五六七八九十百千\d]+[章节回]/);
     if(m1){
       const rest=p.substring(m1.index+m1[0].length).trim().replace(/^[　\s]+/,'');
-      if(!BLACK.test(rest)&&rest.length<80){
-        title=m1[0]+' '+(rest?rest.substring(0,18):'');
-      }else if(!rest||rest.length<3){
-        title=m1[0];
-      }
+      if(!BLACK.test(rest)&&rest.length<80) title=m1[0]+' '+(rest?rest.substring(0,18):'');
+      else if(!rest||rest.length<3) title=m1[0];
     }
     // 规则2：英文Chapter
+    if(!title){const m2=p.match(/Chapter\s*\d+|CHAPTER\s*[IVX]+/i);if(m2)title=p.substring(m2.index,Math.min(m2.index+30,p.length)).trim();}
+    // 规则3：纯数字/中文数字章节（罪与罚类）
     if(!title){
-      const m2=p.match(/Chapter\s*\d+|CHAPTER\s*[IVX]+/i);
-      if(m2) title=p.substring(m2.index,Math.min(m2.index+30,p.length)).trim();
+      const m3=p.match(/^(\d+|[一二三四五六七八九十百]+)\s*$/);
+      if(m3&&p.length<20&&i>tocEndIdx&&(i-lastIdx)>2) title='第'+m3[1]+'章';
     }
-    // 规则3：短段落+非黑名单+非标点+与上一章距离>3段（仅预置书）
-    if(!title&&!curBook.isUploaded&&p.length<40&&p.length>3&&!/[，。！？,\.!\?：:；;]/.test(p)&&!BLACK.test(p)&&(i-lastIdx)>3){
-      title=p.trim();
+    // 规则4：数字+句号开头（"1. xxx" "2、xxx"）
+    if(!title){
+      const m4=p.match(/^(\d{1,3})[\.\、\)）]\s*(\S)/);
+      if(m4&&p.length<100&&(i-lastIdx)>2) title=m4[0]+(p.length>25?'...':'');
     }
+    // 规则5：短段落+非黑名单（仅预置书）
+    if(!title&&!curBook.isUploaded&&p.length<40&&p.length>3&&!/[，。！？,\.!\?：:；;]/.test(p)&&!BLACK.test(p)&&(i-lastIdx)>3) title=p.trim();
     if(title){gChapters.push({title,index:i});lastIdx=i;}
   });
-  // 如果章节数>段落数的一半，说明误判太多，只保留第X章格式
-  if(gChapters.length>zh.length*0.5&&gChapters.length>10){
-    gChapters=gChapters.filter(c=>/第[一二三四五六七八九十百千\d]+[章节回]/.test(c.title)||/Chapter/i.test(c.title));
-  }
-  // 硬上限：最多200条，超过说明误判，只保留"第X章"格式
-  if(gChapters.length>200){gChapters=gChapters.filter(c=>/第[一二三四五六七八九十百千\d]+[章节回]/.test(c.title));}
-  // 更新目录面板
+  // 去重&过滤
+  if(gChapters.length>zh.length*0.5&&gChapters.length>10) gChapters=gChapters.filter(c=>/第[一二三四五六七八九十百千\d]+[章节回]/.test(c.title)||/Chapter/i.test(c.title));
+  if(gChapters.length>200) gChapters=gChapters.filter(c=>/第[一二三四五六七八九十百千\d]+[章节回]/.test(c.title));
+  // 去重：相邻且标题相同
+  gChapters=gChapters.filter((c,i)=>i===0||c.title!==gChapters[i-1].title);
+
   if(gChapters.length===0){toc.innerHTML='<span style="font-size:0.75em;color:var(--s)">未检测到章节标题</span>';document.getElementById('chapNav').style.display='none';return;}
-  const display=gChapters.slice(0,200); // 最多显示200条
+  const display=gChapters.slice(0,200);
   toc.innerHTML=display.map((c,idx)=>'<div style="padding:5px 8px;cursor:pointer;font-size:0.78em;border-radius:4px;margin-bottom:2px" onclick="scrollToPara('+c.index+')" onmouseover="this.style.background=\'var(--hl)\'" onmouseout="this.style.background=\'transparent\'"><span style="color:var(--s);font-size:0.8em">'+(idx+1)+'.</span> '+escapeHtml(c.title)+'</div>').join('');
   if(gChapters.length>200) toc.innerHTML+='<div style="font-size:0.7em;color:var(--s);padding:4px">... 还有'+(gChapters.length-200)+'条未显示</div>';
   document.getElementById('chapNav').style.display='flex';
