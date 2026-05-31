@@ -781,43 +781,34 @@ function goLib(){
 // ============================================================
 // 5. 阅读器
 // ============================================================
-let curBook=null,curLang='en',editIdx=null,commVersions={},commComments={},realtimeChannel=null;
+let curBook=null,curLang='en',editIdx=null,commVersions={},commComments={},realtimeChannel=null,curChapter=0;
 
 async function openB(id){
   let book=PRELOAD[id];
   if(!book){
-    // 策略1：从Supabase加载（跨设备可靠，主通道）
     if(db){try{
-      const{data:bData,error:bErr}=await db.from('books').select('*').eq('id',id).single();
-      if(bData&&!bErr){
-        const{data:tData}=await db.from('translations').select('*').eq('book_id',id).eq('language','zh').order('paragraph_index',{ascending:true});
-        const paras=[];if(tData){tData.forEach(t=>{paras[t.paragraph_index]=t.content;});}
-        const zh=paras.filter(p=>p&&p.trim());
-        // 验证：段落数应该和字数成正比（每段约500-2000字）
-        const expectedMin=Math.max(2,Math.floor(bData.word_count/3000));
-        if(zh.length>=expectedMin){
+      const{data:bData}=await db.from('books').select('*').eq('id',id).single();
+      if(bData){
+        // 分页加载全部段落（Supabase默认limit 1000，需分批）
+        const totalCount=bData.word_count>100000?Math.ceil(bData.word_count/200):500;
+        const allParas=[];let hasMore=true,offset=0;
+        while(hasMore){
+          const{data:tData}=await db.from('translations').select('content,paragraph_index').eq('book_id',id).eq('language','zh').order('paragraph_index',{ascending:true}).range(offset,offset+999);
+          if(tData&&tData.length>0){tData.forEach(t=>{allParas[t.paragraph_index]=t.content;});offset+=1000;}
+          if(!tData||tData.length<1000)hasMore=false;
+        }
+        const zh=allParas.filter(p=>p&&p.trim());
+        if(zh.length>0){
           book={title:bData.title,author:bData.author,genre:bData.genre,cover:bData.cover||'📖',desc:bData.description||'',wordCount:bData.word_count||0,zh,en:zh.map(()=>''),isUploaded:true,uploaderId:bData.uploader_id};
-          PRELOAD[id]=book;
-          // 缓存到localStorage加速下次打开
-          try{localStorage.setItem('rb_raw_'+id,zh.join('\n\n'));}catch(e){}
+          PRELOAD[id]=book;try{localStorage.setItem('rb_raw_'+id,zh.join('\n\n'));}catch(e){}
         }
       }
-    }catch(e){console.warn('Supabase渠道失败:',e.message);}}
-    // 策略2：localStorage兜底（本设备缓存）
-    if(!book){
-      const raw=localStorage.getItem('rb_raw_'+id);
-      if(raw){const zh=smartSplit(raw);if(zh.length>0){book={zh,en:zh.map(()=>''),isUploaded:true};PRELOAD[id]=book;}}
-    }
-    // 策略3：Supabase元数据 + 空段落（书存在但内容丢失）
-    if(!book&&db){try{
-      const{data:bData}=await db.from('books').select('*').eq('id',id).single();
-      if(bData){book={title:bData.title,author:bData.author,genre:bData.genre,cover:bData.cover||'📖',desc:bData.description||'',wordCount:bData.word_count||0,zh:[bData.description||'内容加载失败，请尝试删除并重新上传'],en:['Content unavailable. Please delete and re-upload.'],isUploaded:true,uploaderId:bData.uploader_id};PRELOAD[id]=book;}
-    }catch(e){}}
+    }catch(e){console.warn('Supabase加载失败:',e.message);}}
+    if(!book){const raw=localStorage.getItem('rb_raw_'+id);if(raw){const zh=smartSplit(raw);if(zh.length>0){book={zh,en:zh.map(()=>''),isUploaded:true};PRELOAD[id]=book;}}}
   }
-  if(!book){alert('书籍未找到。\n该书籍可能已被删除，或数据库暂时不可用。\n请刷新页面后重试。');return;}
-  if(!book.zh||book.zh.length===0){alert('书籍内容为空。\n请删除该书并重新上传。');return;}
-  curBook=book;curBook.id=id;
-  // 加载用户对该书的版本偏好
+  if(!book){alert('书籍未找到。');return;}
+  if(!book.zh||book.zh.length===0){alert('书籍内容为空。');return;}
+  curBook=book;curBook.id=id;curChapter=0;
   try{userActive=JSON.parse(localStorage.getItem('rb_active_'+id)||'{}');}catch(e){userActive={};}
   document.getElementById('libPage').style.display='none';
   document.getElementById('readerPage').classList.add('on');
@@ -850,7 +841,7 @@ async function openB(id){
   history.pushState({view:'reader',bookId:id},'', '#book='+id);
 }
 
-// 目录构建（存储全局chapters供上下章导航用）
+// 目录构建
 let gChapters=[];
 
 function buildTOC(){
@@ -858,47 +849,44 @@ function buildTOC(){
   const zh=curBook.zh;if(!zh||zh.length<3){gChapters=[];toc.innerHTML='';document.getElementById('chapNav').style.display='none';return;}
   gChapters=[];
 
-  // TOC页检测：前N段中大量短段落 → 判定为目录页，跳过
-  let tocEndIdx=0;
-  if(zh.length>20){
-    const first20=zh.slice(0,20);
-    const shortCount=first20.filter(p=>p.length<80&&!/[，。！？\.!\?：:；;]/.test(p)).length;
-    if(shortCount>=5) tocEndIdx=shortCount; // 前20段中≥5段像标题 → 这是目录页
+  // 检测目录页集群：连续短段落集中在开头 → 判定为目录页
+  let tocEnd=0, consecShort=0;
+  for(let i=0;i<Math.min(zh.length,200);i++){
+    const p=zh[i];const isChapterTitle=/^第[一二三四五六七八九十百千\d]+[章节回]/.test(p)&&p.length<60;
+    if(isChapterTitle){consecShort++;tocEnd=i+1;}
+    else if(p.length<80&&!/[，。！？\.!\?：:；;]/.test(p)&&consecShort>0){consecShort++;tocEnd=i+1;}
+    else if(p.length>200){break;}
+    else if(consecShort>10){break;}
+    else{consecShort=0;}
   }
+  // 如果前50段中≥30个短标题 → 整个开头都是目录页
+  if(tocEnd>0&&tocEnd<100){tocEnd=Math.min(tocEnd,100);}
 
-  const BLACK=/^(注释|注解|注|译者序|作者序|前言|序言|后记|跋|附录|参考文献|出版信息|版权|ISBN|定价|印次|版次|印刷|书号|策划|责编|编辑|设计|排版|出品|荣誉|推荐语|目录|楔子|引子|尾声|番外|第一章|第二章|第三章)/;
+  const SKIP=/^(注释|注解|注|译者序|作者序|前言|序言|后记|跋|附录|参考文献|出版信息|版权|ISBN|定价|印次|版次|印刷|书号|策划|责编|编辑|设计|排版|出品|荣誉|推荐语|目录|楔子|引子|尾声|番外)/;
   let lastIdx=-999;
   zh.forEach((p,i)=>{
-    if(i<tocEndIdx)return; // 跳过目录页段落
+    if(i<tocEnd)return;
     let title='';
-    // 规则1：第X章/节/回
+    // 第X章
     const m1=p.match(/第[一二三四五六七八九十百千\d]+[章节回]/);
     if(m1){
       const rest=p.substring(m1.index+m1[0].length).trim().replace(/^[　\s]+/,'');
-      if(!BLACK.test(rest)&&rest.length<80) title=m1[0]+' '+(rest?rest.substring(0,18):'');
+      if(!SKIP.test(rest)&&rest.length<80) title=m1[0]+(rest?' '+rest.substring(0,18):'');
       else if(!rest||rest.length<3) title=m1[0];
     }
-    // 规则2：英文Chapter
+    // 英文Chapter
     if(!title){const m2=p.match(/Chapter\s*\d+|CHAPTER\s*[IVX]+/i);if(m2)title=p.substring(m2.index,Math.min(m2.index+30,p.length)).trim();}
-    // 规则3：纯数字/中文数字章节（罪与罚类）
-    if(!title){
-      const m3=p.match(/^(\d+|[一二三四五六七八九十百]+)\s*$/);
-      if(m3&&p.length<20&&i>tocEndIdx&&(i-lastIdx)>2) title='第'+m3[1]+'章';
-    }
-    // 规则4：数字+句号开头（"1. xxx" "2、xxx"）
-    if(!title){
-      const m4=p.match(/^(\d{1,3})[\.\、\)）]\s*(\S)/);
-      if(m4&&p.length<100&&(i-lastIdx)>2) title=m4[0]+(p.length>25?'...':'');
-    }
-    // 规则5：短段落+非黑名单（仅预置书）
-    if(!title&&!curBook.isUploaded&&p.length<40&&p.length>3&&!/[，。！？,\.!\?：:；;]/.test(p)&&!BLACK.test(p)&&(i-lastIdx)>3) title=p.trim();
+    // 纯数字
+    if(!title&&p.length<20&&/^\d+$/.test(p)&&(i-lastIdx)>2)title='第'+p+'章';
+    // 数字+标点
+    if(!title){const m4=p.match(/^(\d{1,3})[\.\、\)）]\s*\S/);if(m4&&p.length<100&&(i-lastIdx)>2)title=m4[0];}
+    // 短段(仅预置书)
+    if(!title&&!curBook.isUploaded&&p.length<40&&p.length>3&&!/[，。！？,\.!\?：:；;]/.test(p)&&!SKIP.test(p)&&(i-lastIdx)>5)title=p.trim();
     if(title){gChapters.push({title,index:i});lastIdx=i;}
   });
-  // 去重&过滤
+  // 过滤超标
   if(gChapters.length>zh.length*0.5&&gChapters.length>10) gChapters=gChapters.filter(c=>/第[一二三四五六七八九十百千\d]+[章节回]/.test(c.title)||/Chapter/i.test(c.title));
   if(gChapters.length>200) gChapters=gChapters.filter(c=>/第[一二三四五六七八九十百千\d]+[章节回]/.test(c.title));
-  // 去重：相邻且标题相同
-  gChapters=gChapters.filter((c,i)=>i===0||c.title!==gChapters[i-1].title);
 
   if(gChapters.length===0){toc.innerHTML='<span style="font-size:0.75em;color:var(--s)">未检测到章节标题</span>';document.getElementById('chapNav').style.display='none';return;}
   const display=gChapters.slice(0,200);
@@ -909,9 +897,16 @@ function buildTOC(){
 }
 
 function scrollToPara(i){
-  const left=document.getElementById('leftP'),right=document.getElementById('rightP');
-  const target=left.querySelector('.para[data-i="'+i+'"]')||right.querySelector('.para[data-i="'+i+'"]');
-  if(target){target.scrollIntoView({behavior:'smooth',block:'start'});updateChapNavFromScroll();}
+  // 找到目标段落所属章节并切换
+  for(let c=0;c<gChapters.length;c++){
+    const nextStart=(c+1<gChapters.length)?gChapters[c+1].index:curBook.zh.length;
+    if(i>=gChapters[c].index&&i<nextStart){curChapter=c;break;}
+  }
+  renderL();renderR();updateWC();syncScroll();updateChapNav(curChapter);
+  setTimeout(()=>{
+    const target=document.querySelector('#leftC .para[data-i="'+i+'"]')||document.querySelector('#rightC .para[data-i="'+i+'"]');
+    if(target)target.scrollIntoView({behavior:'smooth',block:'start'});
+  },200);
 }
 
 // 上下章导航
@@ -921,25 +916,23 @@ function updateChapNav(curIdx){
   document.getElementById('chapLabel').textContent=(curIdx+1)+'/'+gChapters.length;
 }
 function prevChapter(){
-  const cur=currentChapterIndex();if(cur>0)scrollToPara(gChapters[cur-1].index);
+  if(curChapter>0){curChapter--;renderL();renderR();updateWC();syncScroll();updateChapNav(curChapter);document.getElementById('leftP').scrollTop=0;}
 }
 function nextChapter(){
-  const cur=currentChapterIndex();if(cur<gChapters.length-1)scrollToPara(gChapters[cur+1].index);
-}
-function currentChapterIndex(){
-  const left=document.getElementById('leftP');if(!left)return 0;
-  const scrollTop=left.scrollTop;let best=0;
-  for(let i=gChapters.length-1;i>=0;i--){if(gChapters[i].index*60<scrollTop+100){best=i;break;}}// 粗略估算每段60px
-  return best;
-}
-function updateChapNavFromScroll(){
-  const cur=currentChapterIndex();updateChapNav(cur);
+  if(curChapter<gChapters.length-1){curChapter++;renderL();renderR();updateWC();syncScroll();updateChapNav(curChapter);document.getElementById('leftP').scrollTop=0;}
 }
 
 async function loadCloudVersions(){
   if(!db)return;
-  try{const{data}=await db.from('translations').select('*').eq('book_id',curBook.id).eq('language',curLang).order('version',{ascending:true});
-  if(data){data.forEach(v=>{const k=v.paragraph_index+'-'+curLang;if(!commVersions[k])commVersions[k]=[];commVersions[k].push(v);});}}catch(e){console.warn('Load versions failed');}
+  try{
+    const allVers=[];let hasMore=true,offset=0;
+    while(hasMore){
+      const{data}=await db.from('translations').select('*').eq('book_id',curBook.id).eq('language',curLang).order('version',{ascending:true}).range(offset,offset+999);
+      if(data&&data.length>0){allVers.push(...data);offset+=1000;}
+      if(!data||data.length<1000)hasMore=false;
+    }
+    allVers.forEach(v=>{const k=v.paragraph_index+'-'+curLang;if(!commVersions[k])commVersions[k]=[];commVersions[k].push(v);});
+  }catch(e){console.warn('Load versions failed');}
 }
 async function loadComments(){
   if(!db)return;
@@ -990,16 +983,29 @@ function getVersions(pi,lang){
   return commVersions[k]||[];
 }
 
+// 当前章节的段落范围
+function chapterRange(){
+  if(!gChapters.length) return {start:0,end:curBook.zh.length};
+  const start=gChapters[curChapter]?gChapters[curChapter].index:0;
+  const end=(curChapter+1<gChapters.length)?gChapters[curChapter+1].index:curBook.zh.length;
+  return {start,end};
+}
+
 function renderL(){
   const c=document.getElementById('leftC');
   const zh=curBook.zh;if(!zh)return;
-  c.innerHTML=zh.map((t,i)=>'<div class="para" data-i="'+i+'"><span class="n">§ '+(i+1)+'</span>'+escapeHtml(t)+'</div>').join('');
+  const r=chapterRange();
+  c.innerHTML=zh.slice(r.start,r.end).map((t,i)=>{
+    const absIdx=r.start+i;
+    return'<div class="para" data-i="'+absIdx+'"><span class="n">§ '+(absIdx+1)+'</span>'+escapeHtml(t)+'</div>';
+  }).join('');
 }
 
 function renderR(){
   const c=document.getElementById('rightC');
   const zh=curBook.zh;if(!zh)return;
-  c.innerHTML=zh.map((_,i)=>{
+  const r=chapterRange();
+  c.innerHTML=zh.slice(r.start,r.end).map((_,j)=>{const i=r.start+j;
     const v=getActive(i,curLang);const has=v&&v.content;
     const vs=getVersions(i,curLang);
     const humanVs=vs.filter(x=>x.author_name!=='AI');
@@ -1061,7 +1067,7 @@ function updateWC(){
 function syncScroll(){
   const L=document.getElementById('leftP'),R=document.getElementById('rightP');let s=false;
   function sync(a,b){if(s)return;s=true;const r=a.scrollTop/(a.scrollHeight-a.clientHeight||1);b.scrollTop=r*(b.scrollHeight-b.clientHeight||1);requestAnimationFrame(()=>{s=false;});}
-  L.onscroll=()=>{sync(L,R);updateChapNavFromScroll();};R.onscroll=()=>{sync(R,L);updateChapNavFromScroll();};
+  L.onscroll=()=>sync(L,R);R.onscroll=()=>sync(R,L);
 }
 
 function setL(l,el){
