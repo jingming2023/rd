@@ -126,6 +126,7 @@ button{font-family:inherit;cursor:pointer}
 <!-- 顶部 -->
 <header class="topbar">
   <span class="logo" onclick="goLib()">📖 语桥 ReadBridge</span>
+  <span id="dbStatus" style="font-size:0.65em;color:var(--s);margin-left:4px">⏳ 连接中</span>
   <div class="nav" id="nav"></div>
 </header>
 
@@ -177,6 +178,8 @@ button{font-family:inherit;cursor:pointer}
       <button onclick="setL('fr',this)" style="padding:5px 9px;border:none;background:var(--pbg);font-size:0.76em;color:var(--s)">🇫🇷</button>
     </div>
     <button class="btn sm" onclick="document.getElementById('tocPanel').style.display=document.getElementById('tocPanel').style.display==='none'?'block':'none'">📑 目录</button>
+    <button class="btn sm" id="dlBookBtn" style="display:none" onclick="downloadBook()">📥 下载原文</button>
+    <button class="btn sm" id="upTransBtn" style="display:none" onclick="openTransUp()">📤 上传翻译</button>
     <button class="btn sm" onclick="document.body.classList.toggle('dark')">🌓</button>
     <button class="btn sm" id="delBookBtn" style="display:none;color:#dc2626;border-color:#dc2626" onclick="deleteBook()">🗑️ 删除</button>
     <span style="display:none;align-items:center;gap:4px;margin-left:8px" id="chapNav">
@@ -271,6 +274,75 @@ button{font-family:inherit;cursor:pointer}
 <script>
 const SUPABASE_URL = 'https://hgdmyrkdxcnduxhbezfd.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_bXidjI4JfQ3r224M2cRcLw_1gNSpo0C';
+
+// ========== 下载原文 ==========
+function downloadBook(){
+  if(!curBook||!curBook.zh)return;
+  const text=curBook.zh.join('\n\n');
+  const blob=new Blob([text],{type:'text/plain;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download=(curBook.title||'download')+'.txt';a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// ========== 上传翻译 ==========
+let transUpText=null,transUpParas=null;
+function openTransUp(){
+  if(!session||!curBook){alert('请先打开一本书并登录');return;}
+  document.getElementById('transUpParaCount').textContent=curBook.zh.length;
+  document.getElementById('transUpResult').textContent='';
+  document.getElementById('transUpPaste').value='';
+  document.getElementById('transUpFile').value='';
+  transUpText=null;transUpParas=null;
+  document.getElementById('transUpM').classList.add('on');
+}
+function closeTransUp(){document.getElementById('transUpM').classList.remove('on');}
+
+function previewTransFile(){
+  const f=document.getElementById('transUpFile').files[0];if(!f)return;
+  const r=new FileReader();r.onload=function(e){
+    transUpText=e.target.result;transUpParas=smartSplit(transUpText);
+    showTransMatch();
+  };r.readAsText(f,'UTF-8');
+}
+// 监听粘贴框
+document.addEventListener('DOMContentLoaded',()=>{
+  document.getElementById('transUpPaste').addEventListener('input',function(){
+    transUpText=this.value;if(transUpText.trim().length>50) transUpParas=smartSplit(transUpText);
+    showTransMatch();
+  });
+});
+function showTransMatch(){
+  if(!transUpParas||!curBook)return;
+  const orig=curBook.zh.length,trans=transUpParas.length;
+  const diff=Math.abs(orig-trans);
+  const ok=diff===0||(diff<=3&&orig>20);
+  document.getElementById('transUpResult').innerHTML=ok
+    ?'<span style="color:var(--grammar-prep)">✅ 段落数匹配：原文'+orig+'段，翻译'+trans+'段（差异'+diff+'段，可接受）</span>'
+    :'<span style="color:#dc2626">❌ 段落数不匹配：原文'+orig+'段，翻译'+trans+'段（差异'+diff+'段）。请检查翻译文件段落结构。</span>';
+}
+
+async function doTransUp(){
+  if(!transUpText||!transUpParas){alert('请先选择翻译文件或粘贴译文');return;}
+  const orig=curBook.zh.length,trans=transUpParas.length;
+  if(Math.abs(orig-trans)>3&&orig>20){alert('段落数差异过大（原文'+orig+'段，翻译'+trans+'段），请确保翻译保持了相同的段落结构。');return;}
+  if(!db){alert('数据库未连接');return;}
+  try{
+    const count=Math.min(orig,trans);
+    for(let i=0;i<count;i+=100){
+      const batch=[];
+      for(let j=i;j<Math.min(i+100,count);j++){
+        batch.push({book_id:curBook.id,paragraph_index:j,language:'en',version:1,author_name:profile?.username||'AI',content:transUpParas[j]});
+      }
+      await db.from('translations').insert(batch);
+    }
+    closeTransUp();
+    await loadCloudVersions();renderR();showReport();
+    alert('✅ 翻译上传成功！'+count+'段译文已导入。\n刷新页面即可看到效果。');
+  }catch(e){alert('上传失败：'+e.message);}
+}
+
+
 let db = null;
 try {
   if(typeof supabase!=='undefined'){
@@ -609,12 +681,18 @@ async function doUp(btn){
 
     localStorage.setItem('rb_raw_'+bookId,text);
     if(db){
-      if(btn)btn.textContent='⏳ 存入云端 1/2...';
+      if(btn)btn.textContent='⏳ 存入云端...';
       await db.from('books').insert({id:bookId,title,author,genre,cover:'📖',description:text.substring(0,5000),word_count:text.length,uploader_id:session.user.id});
       for(let i=0;i<paras.length;i+=100){
-        if(btn)btn.textContent='⏳ 存入云端 '+(Math.min(i+100,paras.length))+'/'+paras.length+' 段...';
+        if(btn)btn.textContent='⏳ '+(Math.min(i+100,paras.length))+'/'+paras.length+' 段...';
         const batch=paras.slice(i,i+100).map((p,j)=>({book_id:bookId,paragraph_index:i+j,language:'zh',version:1,author_name:'AI',content:p}));
         await db.from('translations').insert(batch);
+      }
+      // 验证写入：从数据库读回确认
+      if(btn)btn.textContent='⏳ 验证数据...';
+      const{count:verifyCount}=await db.from('translations').select('*',{count:'exact',head:true}).eq('book_id',bookId).eq('language','zh');
+      if(!verifyCount||verifyCount<paras.length*0.8){
+        throw new Error('数据验证失败：期望'+paras.length+'段，云端仅存'+(verifyCount||0)+'段。请重试。');
       }
     }
 
@@ -633,11 +711,14 @@ async function doUp(btn){
 let filterTag='all';
 async function renderLib(){
   let books=Object.entries(PRELOAD).map(([id,b])=>({id,...b}));
-  // 从Supabase加载用户上传的书籍
+  // 从Supabase加载用户上传的书籍（每次打开资料库都重新拉取）
   if(db){try{
     const{data}=await db.from('books').select('*');
     if(data) data.forEach(b=>{if(!PRELOAD[b.id]) books.push({id:b.id,title:b.title,author:b.author,genre:b.genre,cover:b.cover||'📖',desc:b.description||'',wordCount:b.word_count||0,isUploaded:true,uploaderId:b.uploader_id});});
-  }catch(e){console.warn('Load books failed');}}
+    document.getElementById('dbStatus').textContent='✅ 已连接';
+    document.getElementById('dbStatus').style.color='var(--grammar-prep)';
+  }catch(e){console.warn('Load books failed');document.getElementById('dbStatus').textContent='⚠ 离线';document.getElementById('dbStatus').style.color='#f59e0b';}}
+  else{document.getElementById('dbStatus').textContent='⚠ 离线';document.getElementById('dbStatus').style.color='#f59e0b';}
   if(filterTag!=='all') books=books.filter(b=>b.genre===filterTag);
   document.getElementById('bookGrid').innerHTML=books.map(b=>{
     return'<div class="book-card" onclick="openB(\''+b.id+'\')">'
@@ -666,29 +747,37 @@ let curBook=null,curLang='en',editIdx=null,commVersions={},commComments={},realt
 
 async function openB(id){
   let book=PRELOAD[id];
-  // 如果不是预置书，从Supabase+localStorage加载
   if(!book){
-    // 先从Supabase translations表重建全部段落（跨设备可靠）
+    // 策略1：从Supabase加载（跨设备可靠，主通道）
     if(db){try{
-      const{data:bData}=await db.from('books').select('*').eq('id',id).single();
-      if(bData){
+      const{data:bData,error:bErr}=await db.from('books').select('*').eq('id',id).single();
+      if(bData&&!bErr){
         const{data:tData}=await db.from('translations').select('*').eq('book_id',id).eq('language','zh').order('paragraph_index',{ascending:true});
         const paras=[];if(tData){tData.forEach(t=>{paras[t.paragraph_index]=t.content;});}
-        const cleanParas=paras.filter(p=>p&&p.trim());
-        // 如果Supabase段落不全，用localStorage补
-        let zh=cleanParas;
-        if(zh.length===0||(bData.word_count>1000&&zh.length<10)){
-          const raw=localStorage.getItem('rb_raw_'+id);
-          if(raw){zh=smartSplit(raw);}
+        const zh=paras.filter(p=>p&&p.trim());
+        // 验证：段落数应该和字数成正比（每段约500-2000字）
+        const expectedMin=Math.max(2,Math.floor(bData.word_count/3000));
+        if(zh.length>=expectedMin){
+          book={title:bData.title,author:bData.author,genre:bData.genre,cover:bData.cover||'📖',desc:bData.description||'',wordCount:bData.word_count||0,zh,en:zh.map(()=>''),isUploaded:true,uploaderId:bData.uploader_id};
+          PRELOAD[id]=book;
+          // 缓存到localStorage加速下次打开
+          try{localStorage.setItem('rb_raw_'+id,zh.join('\n\n'));}catch(e){}
         }
-        book={title:bData.title,author:bData.author,genre:bData.genre,cover:bData.cover||'📖',desc:bData.description||'',wordCount:bData.word_count||0,zh,en:zh.map(()=>''),isUploaded:true,uploaderId:bData.uploader_id};
-        PRELOAD[id]=book;
       }
-    }catch(e){console.warn('Supabase load failed, trying localStorage:',e.message);}}
-    // Supabase失败时从localStorage兜底
-    if(!book){const raw=localStorage.getItem('rb_raw_'+id);if(raw){book={zh:smartSplit(raw),en:[],isUploaded:true};PRELOAD[id]=book;}}
+    }catch(e){console.warn('Supabase渠道失败:',e.message);}}
+    // 策略2：localStorage兜底（本设备缓存）
+    if(!book){
+      const raw=localStorage.getItem('rb_raw_'+id);
+      if(raw){const zh=smartSplit(raw);if(zh.length>0){book={zh,en:zh.map(()=>''),isUploaded:true};PRELOAD[id]=book;}}
+    }
+    // 策略3：Supabase元数据 + 空段落（书存在但内容丢失）
+    if(!book&&db){try{
+      const{data:bData}=await db.from('books').select('*').eq('id',id).single();
+      if(bData){book={title:bData.title,author:bData.author,genre:bData.genre,cover:bData.cover||'📖',desc:bData.description||'',wordCount:bData.word_count||0,zh:[bData.description||'内容加载失败，请尝试删除并重新上传'],en:['Content unavailable. Please delete and re-upload.'],isUploaded:true,uploaderId:bData.uploader_id};PRELOAD[id]=book;}
+    }catch(e){}}
   }
-  if(!book){alert('书籍未找到');return;}
+  if(!book){alert('书籍未找到。\n该书籍可能已被删除，或数据库暂时不可用。\n请刷新页面后重试。');return;}
+  if(!book.zh||book.zh.length===0){alert('书籍内容为空。\n请删除该书并重新上传。');return;}
   curBook=book;curBook.id=id;
   // 加载用户对该书的版本偏好
   try{userActive=JSON.parse(localStorage.getItem('rb_active_'+id)||'{}');}catch(e){userActive={};}
@@ -708,9 +797,17 @@ async function openB(id){
   renderL();renderR();updateWC();syncScroll();
   // 显示删除按钮（上传的书 + 已登录即可删除，不严格校验uploaderId）
   const delBtn=document.getElementById('delBookBtn');
+  const dlBtn=document.getElementById('dlBookBtn');
+  const utBtn=document.getElementById('upTransBtn');
   if(curBook.isUploaded&&session){
     delBtn.style.display='inline-flex';
-  }else{delBtn.style.display='none';}
+    dlBtn.style.display='inline-flex';
+    utBtn.style.display='inline-flex';
+  }else{
+    delBtn.style.display='none';
+    dlBtn.style.display=curBook.isUploaded?'inline-flex':'none';
+    utBtn.style.display=curBook.isUploaded&&session?'inline-flex':'none';
+  }
   // 浏览器返回键支持
   history.pushState({view:'reader',bookId:id},'', '#book='+id);
 }
