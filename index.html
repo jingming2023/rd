@@ -1251,6 +1251,7 @@ document.addEventListener('DOMContentLoaded',async()=>{
     const vp=document.getElementById('vocabPanel');if(vp)vp.classList.remove('open');
   });
 });
+window.onerror=function(msg,url,line){console.error('[Error '+new Date().toLocaleTimeString()+'] '+msg+' line '+line);return false;};
 </script>
 </body>
 </html>
