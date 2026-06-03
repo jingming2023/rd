@@ -573,27 +573,28 @@ async function doAuth(){
   let r;
   if(authMode==='login'){
     r=await db.auth.signInWithPassword({email,password:pass});
+    if(r.error){alert('登录失败：'+r.error.message);return;}
+    session=r.data.session;
+    closeAuth();await loadProfile();renderNav();renderLib();
   }else{
     if(!name){alert('请填写用户名');return;}
     r=await db.auth.signUp({email,password:pass,options:{data:{username:name}}});
-    if(!r.error){
-      // 手动插入profile（触发器已被移除）
-      await db.from('profiles').insert({id:r.data.user.id,username:name});
+    if(r.error){
+      if(r.error.message.includes('rate limit')||r.error.message.includes('exceeded')){
+        alert('注册频率过高，请稍后重试。\n\n或使用演示账号：alice@demo.com / bob@demo.com\n密码：demo1234');
+      }else{alert('注册失败：'+r.error.message);}
+      return;
     }
-  }
-  if(r.error){
-    if(r.error.message.includes('rate limit')||r.error.message.includes('exceeded')){
-      alert('注册暂时受限（服务器频率限制）。\n\n请稍后重试，或使用演示账号：\nalice@demo.com / bob@demo.com\n密码：demo1234');
+    // 注册成功后手动插入profile
+    if(r.data.user) await db.from('profiles').insert({id:r.data.user.id,username:name});
+    // 尝试自动登录
+    if(r.data.session){
+      session=r.data.session;closeAuth();await loadProfile();renderNav();renderLib();
+      alert('✅ 注册成功！欢迎 '+name+'！\n你现在可以改进翻译、发评论了。');
     }else{
-      alert('操作失败：'+r.error.message);
+      closeAuth();alert('✅ 注册成功！请用刚才的邮箱和密码登录。');
     }
-    return;
   }
-  session=r.data.session;
-  await loadProfile();
-  closeAuth();
-  renderNav();
-  renderLib();
 }
 async function doLogout(){if(db)await db.auth.signOut();session=null;profile=null;renderNav();renderLib();}
 async function loadProfile(){
