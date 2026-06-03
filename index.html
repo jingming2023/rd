@@ -212,10 +212,8 @@ button{font-family:inherit;cursor:pointer}
   <input type="email" id="authEmail" placeholder="邮箱">
   <input type="password" id="authPass" placeholder="密码（至少6位）">
   <input type="text" id="authName" placeholder="用户名（注册时需要）">
-  <div class="form-hint" style="margin-bottom:8px;background:var(--hl);padding:8px;border-radius:8px;font-size:0.75em;">
-    💡 <strong>演示账号（可直接登录）：</strong><br>
-    alice / bob / carol / david / emma / frank @demo.com<br>
-    密码统一：<strong>demo1234</strong>
+  <div class="form-hint" style="margin-bottom:8px;font-size:0.72em;color:var(--s);text-align:center">
+    注册即可同步翻译贡献，所有数据云端保存
   </div>
   <div class="acts">
     <button class="btn" id="authToggle" onclick="toggleAuth()">没有账号？去注册</button>
@@ -585,7 +583,7 @@ async function doAuth(){
   }
   if(r.error){
     if(r.error.message.includes('rate limit')||r.error.message.includes('exceeded')){
-      alert('注册暂时受限（演示环境频率限制）。\n\n请直接使用演示账号登录：\nalice@demo.com / bob@demo.com / carol@demo.com\n密码：demo1234');
+      alert('注册暂时受限（服务器频率限制）。\n\n请稍后重试，或使用演示账号：\nalice@demo.com / bob@demo.com\n密码：demo1234');
     }else{
       alert('操作失败：'+r.error.message);
     }
