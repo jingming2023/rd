@@ -1,0 +1,1255 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>语桥 ReadBridge — 协作双语阅读平台</title>
+<!-- Supabase SDK：主CDN + 国内备用 -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script>
+  if(typeof supabase==='undefined'){
+    document.write('<script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.min.js"><\/script>');
+  }
+</script>
+<style>
+:root{--bg:#faf7f2;--pbg:#fffdf9;--t:#3b3028;--s:#8b7355;--a:#8b5e3c;--a2:#c4956a;--bd:#e5dbcd;--sh:0 1px 6px rgba(0,0,0,0.04);--hl:#fff8e7;--ca:#dcfce7;--cd:#fee2e2;--bbg:#dbeafe;--bbb:#93c5fd;--bbt:#2563eb}
+body.dark{--bg:#1a1a2e;--pbg:#16213e;--t:#d4d4d4;--s:#9a9a9a;--a:#e2b96f;--a2:#f0d89c;--bd:#2a2a4a;--sh:0 1px 6px rgba(0,0,0,0.2);--hl:#3a3520;--ca:#14532d;--cd:#7f1d1d;--bbg:#1e3a5f;--bbb:#3b82f6;--bbt:#93c5fd}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Georgia','Noto Serif SC',serif;background:var(--bg);color:var(--t);min-height:100vh;transition:background 0.3s,color 0.3s}
+a{color:var(--a);text-decoration:none;cursor:pointer}a:hover{text-decoration:underline}
+button{font-family:inherit;cursor:pointer}
+
+/* 顶部 */
+.topbar{background:var(--pbg);border-bottom:1px solid var(--bd);padding:8px 18px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;position:sticky;top:0;z-index:100}
+.topbar .logo{font-size:1.15em;font-weight:700;color:var(--a);cursor:pointer}
+.nav{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.btn{padding:6px 14px;border:1.5px solid var(--bd);border-radius:16px;background:var(--pbg);font-size:0.82em;color:var(--t);transition:all 0.2s;display:inline-flex;align-items:center;gap:4px}
+.btn:hover{border-color:var(--a2);background:var(--hl)}
+.btn.a{background:var(--a);color:#fff;border-color:var(--a)}.btn.a:hover{opacity:0.85}
+.btn.sm{padding:4px 9px;font-size:0.72em;border-radius:12px}
+
+/* 资料库 */
+.lib-page{padding:28px 20px;max-width:1100px;margin:0 auto}
+.lib-page h1{font-size:1.5em;color:var(--a);margin-bottom:4px}
+.lib-page .sub{font-size:0.85em;color:var(--s);margin-bottom:18px}
+.lib-tags{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px}
+.lib-tags span{padding:4px 13px;border-radius:14px;border:1.5px solid var(--bd);cursor:pointer;font-size:0.8em;transition:all 0.2s;background:var(--pbg);color:var(--s)}
+.lib-tags span.on,.lib-tags span:hover{background:var(--a);color:#fff;border-color:var(--a)}
+.book-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}
+.book-card{background:var(--pbg);border:1.5px solid var(--bd);border-radius:14px;padding:20px;cursor:pointer;transition:all 0.2s;box-shadow:var(--sh)}
+.book-card:hover{transform:translateY(-3px);box-shadow:0 6px 20px rgba(0,0,0,0.08);border-color:var(--a2)}
+.book-card .cover{font-size:2.6em;text-align:center;margin-bottom:8px}
+.book-card .title{font-weight:700;margin-bottom:2px}
+.book-card .author{font-size:0.76em;color:var(--s);margin-bottom:6px}
+.book-card .genre{display:inline-block;padding:2px 8px;border-radius:6px;font-size:0.73em;background:var(--hl);color:var(--a)}
+.book-card .meta{font-size:0.7em;color:var(--s);margin-top:8px;display:flex;gap:10px;align-items:center}
+.book-card .meta .has-contrib{background:var(--bbg);color:var(--bbt);font-weight:600;padding:1px 7px;border-radius:8px;font-size:0.95em}
+
+/* 阅读器 */
+.reader-page{display:none;height:calc(100vh - 50px);flex-direction:column}
+.reader-page.on{display:flex}
+.reader-top{display:flex;align-items:center;gap:12px;padding:7px 16px;border-bottom:1px solid var(--bd);flex-shrink:0;font-size:0.82em;background:var(--pbg)}
+.reader-body{flex:1;display:flex;overflow:hidden}
+.reader-panel{flex:1;overflow-y:auto;padding:16px 14px}
+.reader-panel.l{background:var(--pbg);border-right:1px solid var(--bd)}
+.reader-panel.r{background:var(--bg)}
+.ph{font-size:0.68em;text-transform:uppercase;letter-spacing:2px;color:var(--s);margin-bottom:10px;padding-bottom:6px;border-bottom:2px solid var(--a2);position:sticky;top:0;background:inherit;z-index:2;display:flex;justify-content:space-between}
+
+/* 段落 */
+.para{margin-bottom:12px;padding:10px 12px;border-radius:8px;border-left:3px solid transparent;line-height:1.85;font-size:var(--fs,1.02em);transition:all 0.2s;position:relative}
+.para:hover{background:var(--hl);border-left-color:var(--a2)}
+.para .n{font-size:0.58em;color:var(--s);display:block;margin-bottom:3px}
+.para .ptool{position:absolute;top:6px;right:8px;display:none;gap:5px;align-items:center;font-size:0.62em}
+.para:hover .ptool{display:flex}
+.para .ptool .vbadge{padding:2px 7px;border-radius:8px;background:var(--bbg);color:var(--bbt);border:1px solid var(--bbb);cursor:pointer;font-weight:600;white-space:nowrap}
+.para .ptool button{padding:2px 7px;border-radius:8px;border:1px solid var(--bd);background:var(--pbg);color:var(--s);cursor:pointer;font-size:0.9em}
+.para .ptool button:hover{border-color:var(--a);color:var(--a)}
+.just-done{animation:fadeUp 0.4s ease-out}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes collabPulse{0%,100%{box-shadow:0 2px 8px rgba(37,99,235,0.3)}50%{box-shadow:0 2px 16px rgba(37,99,235,0.55)}}
+
+/* 评论区 */
+.comments-section{margin-top:6px;padding-left:8px;border-left:2px solid var(--bd)}
+.comment-item{padding:4px 6px;margin:3px 0;font-size:0.78em;display:flex;gap:6px;align-items:flex-start}
+.comment-item .c-author{font-weight:600;color:var(--a);white-space:nowrap;font-size:0.85em}
+.comment-item .c-text{color:var(--t);line-height:1.4}
+.comment-input-row{display:flex;gap:6px;margin-top:4px}
+.comment-input-row input{flex:1;padding:4px 8px;border:1.5px solid var(--bd);border-radius:10px;font-size:0.75em;background:var(--pbg);color:var(--t);font-family:inherit}
+.comment-input-row input:focus{outline:none;border-color:var(--a)}
+.comment-input-row button{font-size:0.7em;padding:3px 8px;border-radius:10px;border:1px solid var(--a);background:var(--a);color:#fff;cursor:pointer}
+
+/* 阅读报告 */
+.report{background:var(--pbg);border:1.5px solid var(--a2);border-radius:14px;padding:20px 24px;margin:16px}
+.report h3{color:var(--a);margin-bottom:10px}
+.report-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:8px}
+.report-item{text-align:center;padding:8px;border-radius:8px;background:var(--hl)}
+.report-item .num{font-size:1.3em;font-weight:700;color:var(--a)}
+.report-item .lbl{font-size:0.68em;color:var(--s);margin-top:2px}
+
+/* 弹窗 */
+.modal{position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:400;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity 0.25s}
+.modal.on{opacity:1;pointer-events:auto}
+.modal .box{background:var(--pbg);border-radius:14px;padding:24px;width:520px;max-width:92vw;max-height:78vh;overflow-y:auto;box-shadow:0 16px 48px rgba(0,0,0,0.2)}
+.modal .box h3{color:var(--a);margin-bottom:4px}
+.modal .mo{font-size:0.8em;color:var(--s);margin-bottom:12px}
+.modal .box input,.modal .box textarea{width:100%;padding:9px 12px;border:2px solid var(--bd);border-radius:10px;background:var(--pbg);color:var(--t);font-family:inherit;font-size:0.92em;margin-bottom:6px}
+.modal .box textarea{min-height:100px;resize:vertical;line-height:1.6}
+.modal .box input:focus,.modal .box textarea:focus{outline:none;border-color:var(--a)}
+.modal .acts{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
+.modal label{display:block;font-size:0.8em;color:var(--s);margin-bottom:3px;font-weight:600}
+.form-hint{font-size:0.72em;color:var(--s);margin-bottom:8px}
+
+/* 版本历史 */
+.vlist{list-style:none;margin:10px 0}
+.vlist li{padding:10px 12px;border-radius:8px;margin-bottom:6px;border:1px solid var(--bd);cursor:pointer}
+.vlist li:hover{background:var(--hl)}
+.vlist li.cur{border-color:var(--a);border-width:2px;background:var(--hl)}
+.vlist li .vh{display:flex;justify-content:space-between;margin-bottom:2px;font-size:0.82em}
+.vlist li .vt{font-size:0.85em;line-height:1.5;margin-top:4px}
+.diff-view{font-size:0.85em;line-height:1.8;margin:8px 0;padding:10px 12px;border-radius:8px;background:var(--bg)}
+.diff-add{background:var(--ca);padding:1px 3px;border-radius:2px}
+.diff-del{background:var(--cd);text-decoration:line-through;padding:1px 3px;border-radius:2px}
+
+@media(max-width:768px){
+  .book-grid{grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:8px}
+  .reader-body{flex-direction:column}
+  .reader-panel{flex:none;height:50%;padding:10px 8px}
+  .reader-panel.l{border-right:none;border-bottom:3px solid var(--a2)}
+  .btn{padding:4px 9px;font-size:0.7em}
+  .topbar{padding:6px 8px;gap:3px}
+  .modal .box{width:96vw;padding:14px}
+}
+</style>
+</head>
+<body>
+
+<!-- 顶部 -->
+<header class="topbar">
+  <span class="logo" onclick="goLib()">📖 语桥 ReadBridge</span>
+  <span id="dbStatus" style="font-size:0.65em;color:var(--s);margin-left:4px">⏳ 连接中</span>
+  <div class="nav" id="nav"></div>
+</header>
+
+<!-- 资料库 -->
+<div class="lib-page" id="libPage">
+  <div style="text-align:center;padding:20px 0 8px">
+    <h1 style="font-size:2em;margin-bottom:6px">📖 语桥 ReadBridge</h1>
+    <div style="font-size:1.15em;color:var(--a);font-weight:700;margin-bottom:6px">像开源代码一样协作翻译每一本书</div>
+    <div style="font-size:0.9em;color:var(--s);margin-bottom:18px">AI提供初稿，社区持续打磨。翻译不是一次性的——它在一群人的手中变得更好。</div>
+    <!-- 用户引导 -->
+    <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:20px" id="heroCards">
+      <div style="background:var(--pbg);border:2px solid var(--bd);border-radius:14px;padding:16px 20px;width:200px;text-align:center;cursor:pointer;transition:all 0.2s" id="heroReader" onclick="event.stopPropagation();flashFirstBook()" onmouseover="this.style.borderColor='var(--a)';this.style.transform='translateY(-2px)'" onmouseout="this.style.borderColor='var(--bd)';this.style.transform='none'">
+        <div style="font-size:2em">📚</div>
+        <div style="font-weight:700;margin:4px 0">我是读者</div>
+        <div style="font-size:0.75em;color:var(--s)">打开一本书<br>中英双语对照阅读</div>
+      </div>
+      <div style="background:var(--pbg);border:2px solid var(--bd);border-radius:14px;padding:16px 20px;width:200px;text-align:center;cursor:pointer;transition:all 0.2s" id="heroTranslator" onclick="event.stopPropagation();openB('little-prince')" onmouseover="this.style.borderColor='var(--a)';this.style.transform='translateY(-2px)'" onmouseout="this.style.borderColor='var(--bd)';this.style.transform='none'">
+        <div style="font-size:2em">✏️</div>
+        <div style="font-weight:700;margin:4px 0">我是译者</div>
+        <div style="font-size:0.75em;color:var(--s)">改进AI翻译<br>帮助更多人读懂好书</div>
+      </div>
+      <div style="background:var(--pbg);border:2px solid var(--bd);border-radius:14px;padding:16px 20px;width:200px;text-align:center;cursor:pointer;transition:all 0.2s" id="heroUpload" onclick="event.stopPropagation();openUp()" onmouseover="this.style.borderColor='var(--a)';this.style.transform='translateY(-2px)'" onmouseout="this.style.borderColor='var(--bd)';this.style.transform='none'">
+        <div style="font-size:2em">📤</div>
+        <div style="font-weight:700;margin:4px 0">我想传书</div>
+        <div style="font-size:0.75em;color:var(--s)">上传文本文件<br>让社区一起翻译</div>
+      </div>
+    </div>
+  </div>
+  <div class="lib-tags" style="justify-content:center">
+    <span class="on" onclick="filter('all',this)">全部</span>
+    <span onclick="filter('名著',this)">📖 名著</span>
+    <span onclick="filter('网文',this)">📱 网文</span>
+    <span onclick="filter('科普',this)">🔬 科普</span>
+    <span onclick="filter('其他',this)">📝 其他</span>
+  </div>
+  <div class="book-grid" id="bookGrid"></div>
+</div>
+
+<!-- 阅读器 -->
+<div class="reader-page" id="readerPage">
+  <div class="reader-top">
+    <button class="btn a sm" onclick="goLib()">🏠 回到主页</button>
+    <span style="color:var(--s)" id="rbTitle"></span>
+    <span style="flex:1"></span>
+    <div style="display:flex;border:1.5px solid var(--bd);border-radius:16px;overflow:hidden">
+      <button class="on" onclick="setL('en',this)" style="padding:5px 9px;border:none;background:var(--a);color:#fff;font-size:0.76em;border-right:1px solid var(--bd)">🇬🇧</button>
+      <button onclick="setL('ja',this)" style="padding:5px 9px;border:none;background:var(--pbg);font-size:0.76em;color:var(--s);border-right:1px solid var(--bd)">🇯🇵</button>
+      <button onclick="setL('ko',this)" style="padding:5px 9px;border:none;background:var(--pbg);font-size:0.76em;color:var(--s);border-right:1px solid var(--bd)">🇰🇷</button>
+      <button onclick="setL('fr',this)" style="padding:5px 9px;border:none;background:var(--pbg);font-size:0.76em;color:var(--s)">🇫🇷</button>
+    </div>
+    <button class="btn sm" onclick="document.getElementById('tocPanel').style.display=document.getElementById('tocPanel').style.display==='none'?'block':'none'">📑 目录</button>
+    <button class="btn sm" id="dlBookBtn" style="display:none" onclick="downloadBook()">📥 下载原文</button>
+    <button class="btn sm" id="upTransBtn" style="display:none" onclick="openTransUp()">📤 上传翻译</button>
+    <button class="btn sm" onclick="document.body.classList.toggle('dark')">🌓</button>
+    <button class="btn sm" id="delBookBtn" style="display:none;color:#dc2626;border-color:#dc2626" onclick="deleteBook()">🗑️ 删除</button>
+    <span style="display:none;align-items:center;gap:4px;margin-left:8px" id="chapNav">
+      <button class="btn sm" id="chapPrev" onclick="prevChapter()">⬆ 上一章</button>
+      <span style="font-size:0.78em;color:var(--s)" id="chapLabel">1/1</span>
+      <button class="btn sm" id="chapNext" onclick="nextChapter()">⬇ 下一章</button>
+    </span>
+  </div>
+  <!-- 目录侧栏 -->
+  <div style="display:none;position:absolute;right:0;top:0;width:200px;height:100%;background:var(--pbg);border-left:1px solid var(--bd);z-index:50;overflow-y:auto;padding:14px 10px" id="tocPanel">
+    <div style="font-weight:700;font-size:0.85em;color:var(--a);margin-bottom:8px">📑 目录</div>
+    <div id="tocList"></div>
+  </div>
+  <div class="reader-body" id="readerBody">
+    <div class="reader-panel l" id="leftP">
+      <div class="ph">📝 原文 <span id="wc" style="font-weight:normal;font-size:0.85em"></span></div>
+      <div id="leftC"></div>
+      <div class="report" id="report" style="display:none"></div>
+    </div>
+    <div class="reader-panel r" id="rightP">
+      <div class="ph">🌐 译文 <span id="tlLbl" style="font-weight:normal;font-size:0.85em">English</span></div>
+      <div id="rightC"><div style="text-align:center;padding:60px;color:var(--s)">打开一本书，开始双语阅读</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- 登录弹窗 -->
+<div class="modal" id="authModal"><div class="box">
+  <h3 id="authTitle">👤 登录</h3><div class="mo" id="authSub">登录以同步翻译贡献</div>
+  <input type="email" id="authEmail" placeholder="邮箱">
+  <input type="password" id="authPass" placeholder="密码（至少6位）">
+  <input type="text" id="authName" placeholder="用户名（注册时需要）">
+  <div class="form-hint" style="margin-bottom:8px;font-size:0.72em;color:var(--s);text-align:center">
+    注册即可同步翻译贡献，所有数据云端保存
+  </div>
+  <div class="acts">
+    <button class="btn" id="authToggle" onclick="toggleAuth()">没有账号？去注册</button>
+    <button class="btn a" id="authBtn" onclick="doAuth()">登录</button>
+  </div>
+</div></div>
+
+<!-- 编辑弹窗 -->
+<div class="modal" id="edM"><div class="box">
+  <h3>✏️ 改进翻译</h3><div class="mo">段落 <span id="edI"></span> · 当前：<strong id="edA"></strong></div>
+  <label>📝 原文</label><div style="padding:10px;background:var(--bg);border-radius:8px;font-size:0.9em;line-height:1.7;margin-bottom:8px" id="edO"></div>
+  <label>🌐 我的翻译</label><textarea id="edT" placeholder="输入更好的翻译..."></textarea>
+  <div class="acts"><button class="btn" onclick="closeEd()">取消</button><button class="btn a" onclick="doEd()">✅ 提交 v<span id="edV">2</span></button></div>
+</div></div>
+
+<!-- 版本弹窗 -->
+<div class="modal" id="vrM"><div class="box">
+  <h3>📜 版本历史</h3><div class="mo" id="vrT"></div>
+  <div id="vrDiff" style="display:none"><div style="font-size:0.72em;font-weight:600;margin-bottom:4px">🔄 差异：</div><div class="diff-view" id="vrDiffC"></div></div>
+  <ul class="vlist" id="vrL"></ul>
+  <div class="acts"><button class="btn" onclick="closeVr()">关闭</button></div>
+</div></div>
+
+<!-- 个人主页 -->
+<div class="modal" id="profM"><div class="box">
+  <h3 id="profName">👤 个人主页</h3><div class="mo" id="profBio"></div>
+  <div class="report-grid" style="margin-bottom:12px">
+    <div class="report-item"><div class="num" id="profContribs">0</div><div class="lbl">✏️ 翻译贡献</div></div>
+    <div class="report-item"><div class="num" id="profComments">0</div><div class="lbl">💬 评论数</div></div>
+    <div class="report-item"><div class="num" id="profBooks">0</div><div class="lbl">📖 参与书籍</div></div>
+  </div>
+  <div style="font-size:0.82em;color:var(--s);margin-bottom:6px">📝 最近贡献：</div>
+  <div id="profActivity" style="font-size:0.8em;color:var(--s)">加载中...</div>
+  <div class="acts"><button class="btn" onclick="closeProf()">关闭</button></div>
+</div></div>
+
+<!-- 上传弹窗 -->
+<div class="modal" id="upM"><div class="box">
+  <h3>📤 上传新书</h3><div class="mo">支持 TXT 文件。上传后文本加入公共资料库，社区成员可以逐段贡献翻译。</div>
+  <label>📖 书名</label><input type="text" id="upTitle" placeholder="输入书名">
+  <label>✍️ 作者</label><input type="text" id="upAuthor" placeholder="作者名">
+  <label>🏷️ 分类</label>
+  <select id="upGenre" style="width:100%;padding:8px;border:2px solid var(--bd);border-radius:10px;background:var(--pbg);color:var(--t);font-family:inherit;margin-bottom:8px">
+    <option value="名著">📖 名著</option><option value="网文">📱 网文</option><option value="科幻">🚀 科幻</option><option value="科普">🔬 科普</option><option value="其他">📝 其他</option>
+  </select>
+  <label>📎 文件</label>
+  <div style="border:2px dashed var(--a2);border-radius:12px;padding:24px;text-align:center;cursor:pointer" onclick="document.getElementById('upFile').click()">
+    <div style="font-size:2em">📎</div><div>点击选择 TXT 文件</div>
+    <div style="font-size:0.75em;color:var(--s)">暂支持纯文本文件</div>
+  </div>
+  <input type="file" id="upFile" accept=".txt,.md" style="display:none" onchange="document.getElementById('upFileInfo').textContent=this.files[0]?'✅ '+this.files[0].name:''">
+  <div id="upFileInfo" style="font-size:0.78em;color:var(--s);margin-top:4px"></div>
+  <div class="acts"><button class="btn" onclick="closeUp()">取消</button><button class="btn a" onclick="doUp(this)">📤 上传</button></div>
+</div></div>
+
+<!-- 上传翻译弹窗 -->
+<div class="modal" id="transUpM"><div class="box">
+  <h3>📤 上传全书翻译</h3><div class="mo">将大模型翻译好的英文TXT上传，系统自动逐段匹配原文段落。</div>
+  <div style="background:var(--hl);padding:10px;border-radius:8px;margin-bottom:8px;font-size:0.8em">
+    原文 <strong id="transUpParaCount">0</strong> 段，上传的翻译需保持相同段落数（空行分隔）。
+  </div>
+  <details style="margin-bottom:12px;font-size:0.82em" open>
+    <summary style="cursor:pointer;color:var(--a);font-weight:600">📋 翻译流程说明 + 提示词模板（每本书自动生成）</summary>
+    <div style="background:var(--bg);padding:10px;border-radius:8px;margin-top:6px;line-height:1.7">
+      <div style="font-weight:700;color:var(--a);margin-bottom:6px">🔄 三步完成全书翻译：</div>
+      <div style="font-size:0.85em">
+        <strong>第1步：</strong>点 <strong>📥 下载原文</strong> 获取完整 TXT<br>
+        <strong>第2步：</strong>将下方提示词 + 下载的全文 一起发给大模型<br>
+        <strong>第3步：</strong>把大模型输出的译文保存为 TXT，在本页面上传
+      </div>
+      <div style="font-weight:700;color:var(--a);margin:10px 0 4px">📝 大模型提示词（复制后 + 粘贴全书原文）：</div>
+      <div style="position:relative;background:var(--pbg);padding:12px;border-radius:8px;border:1px solid var(--bd)">
+        <button onclick="copyPrompt()" style="position:absolute;top:6px;right:8px;font-size:0.75em;padding:3px 8px;border:1px solid var(--a);border-radius:8px;background:var(--pbg);color:var(--a);cursor:pointer">📋 复制提示词</button>
+        <pre id="promptTemplate" style="white-space:pre-wrap;font-size:0.8em;line-height:1.6;margin:0;padding-top:20px">请将以下中文文本翻译成英文。
+
+要求：
+1. 保持原文的段落结构，每个段落之间用空行（两个换行）分隔
+2. 不要合并或拆分段落
+3. 不要添加任何解释、注释或额外文字
+4. 只输出英文译文
+5. 原文共 <strong id="promptParaCount">0</strong> 段，请确保输出也是相同的段落数
+
+---
+[在这里粘贴 📥下载的 TXT 全文]</pre>
+      </div>
+      <div style="font-size:0.75em;color:var(--s);margin-top:6px">
+        💡 <strong>提示词会根据每本书自动调整：</strong>打开不同书籍时，段落数自动更新。<br>
+        💡 大模型输出后，<strong>另存为 .txt 文件</strong>，然后在本页面选择文件上传。
+      </div>
+    </div>
+  </details>
+  <label>📎 选择翻译好的 TXT 文件</label>
+  <div style="border:2px dashed var(--a2);border-radius:12px;padding:20px;text-align:center;cursor:pointer;margin-bottom:8px" onclick="document.getElementById('transUpFile').click()">
+    <div style="font-size:2em">📎</div><div>点击选择文件 或 下方粘贴</div>
+  </div>
+  <input type="file" id="transUpFile" accept=".txt" style="display:none" onchange="previewTransFile()">
+  <label>📝 或直接粘贴译文全文</label>
+  <textarea id="transUpPaste" placeholder="粘贴大模型翻译的英文全文..." style="min-height:80px"></textarea>
+  <div id="transUpResult" style="font-size:0.82em;margin:8px 0"></div>
+  <div class="acts"><button class="btn" onclick="closeTransUp()">取消</button><button class="btn a" onclick="doTransUp()">✅ 确认上传</button></div>
+</div></div>
+
+<script>
+const SUPABASE_URL = 'https://hgdmyrkdxcnduxhbezfd.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_bXidjI4JfQ3r224M2cRcLw_1gNSpo0C';
+
+// ========== 下载原文 ==========
+function downloadBook(){
+  if(!curBook||!curBook.zh)return;
+  const text=curBook.zh.join('\n\n');
+  const blob=new Blob([text],{type:'text/plain;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download=(curBook.title||'download')+'.txt';a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// ========== 上传翻译 ==========
+let transUpText=null,transUpParas=null;
+function openTransUp(){
+  if(!session||!curBook){alert('请先打开一本书并登录');return;}
+  var el=document.getElementById('transUpParaCount');if(el)el.textContent=curBook.zh.length;
+  el=document.getElementById('promptParaCount');if(el)el.textContent=curBook.zh.length;
+  el=document.getElementById('transUpResult');if(el)el.textContent='';
+  el=document.getElementById('transUpPaste');if(el)el.value='';
+  el=document.getElementById('transUpFile');if(el)el.value='';
+  transUpText=null;transUpParas=null;
+  el=document.getElementById('transUpM');if(el)el.classList.add('on');
+}
+function closeTransUp(){var el=document.getElementById('transUpM');if(el)el.classList.remove('on');}
+function copyPrompt(){
+  var count=curBook&&curBook.zh?curBook.zh.length:0;
+  var text='请将以下中文文本翻译成英文。\n\n要求：\n1. 保持原文的段落结构，每个段落之间用空行（两个换行）分隔\n2. 不要合并或拆分段落\n3. 不要添加任何解释、注释或额外文字\n4. 只输出英文译文\n5. 原文共 '+count+' 段，请确保输出也是相同的段落数\n\n---\n[在此粘贴下载的 TXT 全文]';
+  navigator.clipboard.writeText(text).then(function(){alert('✅ 提示词已复制！\n\n使用方法：\n1. 粘贴到 ChatGPT/Claude 中\n2. 把 [在此粘贴...] 替换为下载的 TXT 全文\n3. 发送，保存输出为 .txt，上传回网站');});
+}
+
+function previewTransFile(){
+  var el=document.getElementById('transUpFile');if(!el||!el.files[0])return;
+  var r=new FileReader();r.onload=function(e){transUpText=e.target.result;transUpParas=smartSplit(transUpText);showTransMatch();};r.readAsText(el.files[0],'UTF-8');
+}
+function showTransMatch(){
+  if(!transUpParas||!curBook||!curBook.zh)return;
+  var orig=curBook.zh.length,trans=transUpParas.length,diff=Math.abs(orig-trans);
+  var ok=diff===0||(diff<=3&&orig>20);
+  var el=document.getElementById('transUpResult');if(!el)return;
+  el.innerHTML=ok?'<span style="color:var(--grammar-prep)">✅ 段落数匹配：原文'+orig+'段，翻译'+trans+'段（差异'+diff+'段，可接受）</span>':'<span style="color:#dc2626">❌ 段落数不匹配：原文'+orig+'段，翻译'+trans+'段（差异'+diff+'段）。请检查翻译文件段落结构。</span>';
+}
+async function doTransUp(){
+  if(!transUpText||!transUpParas){alert('请先选择翻译文件或粘贴译文');return;}
+  if(!curBook||!curBook.zh){alert('请先打开一本书');return;}
+  var orig=curBook.zh.length,trans=transUpParas.length;
+  if(Math.abs(orig-trans)>3&&orig>20){alert('段落数差异过大（原文'+orig+'段，翻译'+trans+'段），请确保翻译保持了相同的段落结构。');return;}
+  if(!db){alert('数据库未连接');return;}
+  try{
+    var count=Math.min(orig,trans);
+    for(var i=0;i<count;i+=100){
+      var batch=[];
+      for(var j=i;j<Math.min(i+100,count);j++){batch.push({book_id:curBook.id,paragraph_index:j,language:'en',version:1,author_name:profile?profile.username:'AI',content:transUpParas[j]});}
+      await db.from('translations').insert(batch);
+    }
+    closeTransUp();await loadCloudVersions();renderR();showReport();
+    alert('✅ 翻译上传成功！'+count+'段译文已导入。刷新页面查看效果。');
+  }catch(e){alert('上传失败：'+e.message);}
+}
+
+
+let db = null;
+try {
+  if(typeof supabase!=='undefined'){
+    db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  }
+} catch(e){ console.error('Supabase init failed'); }
+function requireDB(){ if(!db){ alert('后端服务暂未连接，请刷新页面后重试。\n\n如多次失败，请检查网络连接。'); return false; } return true; }
+
+let session = null;
+let profile = null;
+
+// ============================================================
+// 2. 预置书籍数据（即时加载，不依赖API）
+// ============================================================
+const PRELOAD = {
+  'little-prince':{
+    title:'小王子',author:'圣-埃克苏佩里',genre:'名著',cover:'🌟',desc:'全球销量仅次于圣经的童话，被翻译成300多种语言。',wordCount:3150,
+    zh:[
+      '当我还只有六岁的时候，在一本描写原始森林的名叫《真实的故事》的书中，看到了一幅精彩的插画，画的是一条蟒蛇正在吞食一头野兽。书中写道："蟒蛇会把猎物整个吞进去，完全不咀嚼。然后它们就无法动弹了，要花六个月的时间边睡觉边消化。"',
+      '当时，我对丛林中的奇遇思考了很多。于是，我也用彩色铅笔，画出了我的第一幅画。我的作品一号。我把我的杰作拿给大人们看，问他们我的画是不是让他们害怕。他们却回答："一顶帽子有什么好怕的？"',
+      '我画的不是一顶帽子。我画的是一条蟒蛇正在消化一头大象。于是我又把蟒蛇肚子里的情况画了出来，好让大人们能够看懂。这些大人啊，总是需要解释。我的作品二号画完后，大人们劝我把这些开着肚皮或闭着肚皮的蟒蛇画丢在一边。',
+      '大人们劝我还是把心思放在地理、历史、算术和语法上。就这样，在六岁那年，我放弃了当画家这一美好的职业。我的作品一号和作品二号没获得成功，这让我泄了气。这些大人们，靠他们自己什么也弄不懂，总是需要不断地给他们解释，这真叫孩子们厌烦。',
+      '所以后来，我只好选择了另外一个职业——我学会了开飞机，差不多飞遍了整个世界。的确，地理学帮了我的大忙。我一眼就能分辨出中国和亚利桑那。要是夜里迷失了航向，这是很有用的。我在大人们中间生活过很长时间，仔细地观察过他们，但这并没有使我对他们的看法有多大的改变。',
+      '当我遇到一个头脑看来稍微清楚的大人时，我就拿出一直保存着的作品一号来测试他。可是，得到的回答总是："这是顶帽子。"我就不和他谈巨蟒、原始森林或者星星之类的事。我只得迁就他们的水平，和他们谈些桥牌、高尔夫球、政治和领带。于是大人们就十分高兴能认识我这样一个通情达理的人。',
+    ],
+    en:[
+      "Once when I was six years old I saw a magnificent picture in a book about the primeval forest, called True Stories. It showed a boa constrictor swallowing a wild beast. In the book it said: \"Boa constrictors swallow their prey whole, without chewing. After that they are not able to move, and they sleep through the six months that they need for digestion.\"",
+      "I pondered deeply over the adventures of the jungle, and after some work with a colored pencil I succeeded in making my first drawing. I showed my masterpiece to the grown-ups and asked whether it frightened them. But they answered: \"Frighten? Why should anyone be frightened by a hat?\"",
+      "My drawing was not a picture of a hat. It was a picture of a boa constrictor digesting an elephant. So I drew the inside of the boa constrictor to help the grown-ups understand. They always need explanations. After Drawing Number Two, the grown-ups advised me to put aside my drawings of boa constrictors.",
+      "The grown-ups advised me to devote myself instead to geography, history, arithmetic and grammar. That is why, at the age of six, I gave up what might have been a magnificent career as a painter. I had been disheartened by the failure of my drawings. Grown-ups never understand anything by themselves, and it is exhausting for children to be always explaining things to them.",
+      "So then I chose another profession, and learned to pilot airplanes. I have flown a little over all parts of the world. Geography has been very useful to me — at a glance I can distinguish China from Arizona. If one gets lost in the night, such knowledge is valuable. I have lived a great deal among grown-ups, seen them intimately, close at hand. And that hasn't much improved my opinion of them.",
+      "Whenever I met one who seemed at all clear-sighted, I tried showing him my Drawing Number One, which I have always kept. But whoever it was would always say: \"That is a hat.\" Then I would never talk to that person about boa constrictors, or primeval forests, or stars. I would bring myself down to his level and talk about bridge, golf, politics, and neckties. And the grown-up would be greatly pleased to have met such a sensible man.",
+    ],
+    ja:[
+      '私が六歳のとき、原生林についての本の中で、ボアという大蛇が野獣を飲みこもうとしている素晴らしい絵を見つけました。「ボアは獲物をかまずにまるのみにし、消化するために六か月ものあいだ眠る」と書いてありました。',
+      '私はジャングルの冒険について深く考え、色鉛筆で最初の絵を描きました。作品第一号です。大人たちにこの傑作を見せると、「帽子がどうしてこわいんだい？」と答えました。',
+      '私の絵は帽子ではなく、ゾウを消化しているボアの絵でした。大人たちにもわかるようにボアのおなかのなかを描きました。大人たちはいつも説明が必要です。すると、ボアの絵はやめるようにと言われました。',
+      '大人たちは地理や歴史、算数や文法に専念しろと言いました。六歳で画家の夢をあきらめました。大人たちは自分では何もわからず、いつも説明しなければならないのは、子どもにとって本当にうんざりすることです。',
+      'そこで私は飛行機の操縦を覚え、世界中を飛びまわりました。地理学がとても役立ちました。一目で中国とアリゾナを見分けられます。大人たちのあいだで長く暮らし、彼らを間近で観察しましたが、意見が変わることはありませんでした。',
+      '少しでも話のわかる大人に出会うと、大切に持っている作品第一号を見せました。でも返事はいつも「これは帽子だね」。それでボアや原生林や星の話はやめて、ブリッジやゴルフや政治やネクタイの話をしました。大人たちはこんな分別のある人と知り合えてとても喜ぶのでした。',
+    ],
+    ko:[
+      '내가 여섯 살 때, 원시림에 관한 책에서 보아뱀이 야수를 삼키는 멋진 그림을 보았다. 책에는 "보아뱀은 먹이를 씹지 않고 통째로 삼키며, 소화하는 데 6개월 동안 잠을 잔다"라고 쓰여 있었다.',
+      '나는 정글의 모험에 대해 깊이 생각한 후 색연필로 첫 그림을 그렸다. 작품 1호. 어른들에게 보여주자 "모자가 뭐가 무섭다고?"라고 대답했다.',
+      '내 그림은 모자가 아니라 코끼리를 소화하는 보아뱀이었다. 어른들이 이해할 수 있도록 뱀의 배 속을 그렸다. 어른들은 항상 설명이 필요하다. 그러자 어른들은 보아뱀 그림을 그만두라고 했다.',
+      '어른들은 지리, 역사, 산수, 문법에 전념하라고 충고했다. 여섯 살에 화가의 꿈을 포기했다. 어른들은 스스로 아무것도 이해하지 못하고, 아이들이 끊임없이 설명해야 하는 것은 정말 지치는 일이다.',
+      '그래서 나는 비행기 조종을 배워 전 세계를 날아다녔다. 지리학이 큰 도움이 되었다. 한눈에 중국과 애리조나를 구별할 수 있다. 어른들 사이에서 오래 살며 그들을 가까이서 관찰했지만, 내 의견이 크게 바뀌지는 않았다.',
+      '분별력 있어 보이는 어른을 만날 때마다 작품 1호를 보여주었다. 하지만 대답은 항상 "이건 모자네". 그래서 보아뱀이나 원시림이나 별 이야기는 하지 않고, 브리지, 골프, 정치, 넥타이 이야기를 했다. 어른들은 그렇게 분별 있는 사람을 만나 크게 기뻐했다.',
+    ],
+  },
+  'border-town':{
+    title:'边城',author:'沈从文',genre:'名著',cover:'🏔️',desc:'沈从文代表作。以湘西小城茶峒为背景，讲述翠翠与傩送的纯美爱情。中国现代文学最唯美的中篇小说。',wordCount:2950,
+    zh:[
+      '由四川过湖南去，靠东有一条官路。这官路将近湘西边境到了一个地方名为"茶峒"的小山城时，有一小溪，溪边有座白色小塔，塔下住了一户单独的人家。这人家只一个老人，一个女孩子，一只黄狗。',
+      '小溪流下去，绕山岨流去了约三里便汇入茶峒的大河。溪流如弓背，山路如弓弦。小溪宽约二十丈，河床为大片石头作成。静静的水即或深到一篙不能落底，却依然清澈透明，河中游鱼来去皆可以计数。',
+      '这渡船一次连人带马，约可以载二十位搭客过河。渡船头竖了一枝小小竹竿，挂着一个可以活动的铁环，溪岸两端水槽牵了一段废缆，有人过渡时，把铁环挂在废缆上，船上人就引手攀缘那条缆索，慢慢的牵船过对岸去。管理这渡船的，就是住在塔下的那个老人。活了七十年，从二十岁起便守在这小溪边，五十年来不知把船来去渡了若干人。',
+      '女孩子的母亲，老船夫的独生女，十五年前同一个茶峒军人唱歌相熟，很秘密的背着那忠厚爸爸发生了暧昧关系。有了小孩子后，军人想约她一同逃去。但军人见她无远走勇气，自己也不便毁去作军人的名誉，首先服了毒。女的却关心腹中的肉，不忍心随他而去。',
+      '事情被作渡船夫的父亲知道，父亲却不加上一个有分量的字眼儿，仍然把日子很平静的过下去。女儿一面怀了羞惭一面却怀了怜悯，仍守在父亲身边。待到腹中小孩生下后，却到溪边吃了许多冷水死去了。在一种近于奇迹中，这遗孤居然已长大成人，一转眼间便十三岁了。',
+      '为了住处两山多篁竹，翠色逼人而来，老船夫随便为这可怜的孤雏拾取了一个近身的名字，叫作"翠翠"。翠翠在风日里长养着，把皮肤变得黑黑的，触目为青山绿水，一对眸子清明如水晶。自然既长养她且教育她，为人天真活泼，处处俨然如一只小兽物。',
+    ],
+    en:[
+      "An old imperial highway running east from Sichuan into Hunan leads to a little mountain town called Chadong. By a narrow stream was a white pagoda, below which lived a solitary family: an old man, a girl, and a yellow dog.",
+      "The stream wound downstream for three li before joining Chadong's great river. It was like the back of a bow; the mountain path was its string. About twenty zhang wide, the stream flowed over boulders. The water was so deep a pole could not reach bottom, yet so clear you could count the fish.",
+      "The ferryboat carried about twenty passengers at a time. On the bow stood a bamboo pole with a movable iron ring. An old cable spanned the stream. To cross, one placed the ring over the cable and pulled hand over hand, drawing the boat across. The ferryman was the old man beneath the pagoda — seventy years old, he had kept the ferry since he was twenty.",
+      "The girl's mother, the ferryman's only daughter, had become involved with a soldier from Chadong fifteen years earlier. After she was with child, the soldier wanted them to flee, but seeing she lacked resolve and unwilling to destroy his honor, he took poison first.",
+      "When the ferryman learned of it, he added not a word of reproach and went on quietly. The daughter, carrying shame and pity, stayed by her father. After the child was born, she went to the stream and drank cold water until she died. By a near miracle, the orphan survived and soon turned thirteen.",
+      "Because the mountains around their home were thick with bamboo, their kingfisher-blue pressing in on the eyes, the old ferryman named the orphan Cuicui — \"Jade Green.\" Raised by wind and sun, her skin grew dark. With green hills and clear waters before her eyes, her gaze was as limpid as crystal. Nature raised and taught her; she was innocent and lively, like a little wild creature.",
+    ],
+  },
+  'doupo':{
+    title:'斗破苍穹',author:'天蚕土豆',genre:'网文',cover:'🔥',desc:'中国网络文学史上最具影响力的玄幻小说。天才少年萧炎从云端跌落谷底后逆天改命的热血故事。"三十年河东，三十年河西，莫欺少年穷！"',wordCount:3100,
+    zh:[
+      '"斗之力，三段！"望着测验魔石碑上面闪亮得甚至有些刺眼的五个大字，少年面无表情，唇角有着一抹自嘲，紧握的手掌，因为大力，而导致略微尖锐的指甲深深的刺进了掌心之中，带来一阵阵钻心的疼痛……',
+      '"萧炎，斗之力，三段！级别：低级！"测验魔石碑之旁，一位中年男子语气漠然的将之公布了出来。话刚刚脱口，便在人头汹涌的广场上带起了一阵嘲讽的骚动。"三段？嘿嘿，这个天才这一年又是在原地踏步！""哎，这废物真是把家族的脸都给丢光了。""要不是族长是他的父亲，这种废物早就被驱赶出家族了。"',
+      '"唉，昔年那名闻乌坦城的天才少年，如今怎么落魄成这般模样了？""谁知道呢，或许做了什么亏心事，惹得神灵降怒了吧……"周围传来的不屑嘲笑，落在少年耳中，恍如一根根利刺狠狠的扎在心脏一般。少年缓缓抬起头来，露出一张有些清秀的稚嫩脸庞，漆黑的眸子木然的扫过那些嘲讽的同龄人。',
+      '"这些人，都如此刻薄势力吗？或许是因为三年前他们曾经在自己面前露出过最谦卑的笑容，所以如今想要讨还回去吧……"苦涩的一笑，萧炎落寞的转身，安静的回到了队伍的最后一排，孤单的身影，与周围的世界，有些格格不入。"下一个，萧媚！"',
+      '少女快速上前，小手轻车熟路的触摸着漆黑的魔石碑，缓缓闭上眼睛。片刻之后，魔石碑之上再次亮起了光芒。"斗之气：七段！""萧媚，斗之气：七段！级别：高级！"听着测验员的声音，窃窃私语又响了起来。"七段斗之气，了不起，顶多三年她就能成为一名真正的斗者。"',
+      '测验继续。进行到一半左右时，人群中忽然骚动了起来。"萧薰儿要上场了！"所有的目光瞬间汇聚到一位身着紫色衣裙的少女身上。少女清冷淡然的气质，犹如清莲初绽，小小年纪已初具脱俗气质。她便是萧家除了萧炎以外最耀眼的天才——萧薰儿。',
+    ],
+    en:[
+      "\"Dou Zhi Li: third stage!\" Gazing at the five large, glaringly bright characters on the Magic Test Monument, the young man's face showed no emotion. A trace of self-mockery flickered at his lips. His clenched fists drove his sharp nails deep into his palms, sending stabs of pain through his body.",
+      "\"Xiao Yan — Dou Zhi Li, third stage. Level: Low!\" Beside the monument, a middle-aged man announced in an indifferent tone. A predictable wave of mockery rippled through the crowd. \"Third stage again! This 'genius' hasn't improved one bit!\" \"That loser is bringing shame on our whole clan.\" \"If his father weren't the clan leader, they'd have thrown him out long ago.\"",
+      "\"The once-famous genius of Wutan City, reduced to this.\" \"Maybe the gods are punishing him...\" The scornful jeers reached the boy, driving into his heart like needles. Slowly he raised his head, revealing a youthful face. His dark eyes swept woodenly across the mocking faces of his peers.",
+      "\"Are these people really so cruel and snobbish? Maybe because three years ago they all showed me their humblest smiles... and now they want to take it all back.\" With a bitter smile, Xiao Yan turned and walked quietly to the back of the line. His solitary figure seemed out of place. \"Next — Xiao Mei!\"",
+      "The girl stepped forward, her small hand expertly touching the dark monument. She closed her eyes. Moments later, it lit up. \"Dou Zhi Qi: seventh stage! Level: High!\" Whispers erupted. \"Seventh stage — impressive! At this rate she'll be a true Dou Zhe within three years. The Xiao clan finally has a worthy successor.\"",
+      "The testing continued. About halfway through, a stir rippled through the crowd. \"Xiao Xun'er is up!\" All eyes converged on a girl in a violet dress. Her cool, serene demeanor was like a lotus just beginning to bloom. Young as she was, she already possessed an otherworldly grace — the Xiao clan's brightest genius after Xiao Yan.",
+    ],
+  },
+  'quanzhi':{
+    title:'全职高手',author:'蝴蝶蓝',genre:'网文',cover:'🎮',desc:'电竞题材网络小说的巅峰之作。荣耀教科书级高手叶修被俱乐部驱逐后，重新组建战队重返巅峰。"如果喜欢，就把这一切当作是荣耀，而不是炫耀。"',wordCount:3050,
+    zh:[
+      '"咔咔咔，嗒嗒……"一双灵巧的手飞舞着操纵着键盘和鼠标，富有节奏的敲击声仿佛是一首轻快的乐章。屏幕中漫天的光华闪过，对手飞扬着血花倒了下去。"呵呵。"叶秋笑了笑，抬手取下了衔在嘴角的烟头。银白的烟灰已结成长长一串，但在操作过程中却没有被震落分毫。',
+      '摘下的烟头很快被掐灭在烟灰缸里，叶秋的手飞快回到键盘，正准备对对手说点什么，房门却"咣"的一声被人推开了。叶秋没有回头，像是早就在等着这一刻："来了？""来了。"苏沐橙的回答也同样简单。"那就走吧！"',
+      '叶秋拒绝了对手的再次邀战，从荣耀专用登录器上摘下了一张卡片，起身走到门口时顺手摘下了外套。夜已经挺深了，嘉世俱乐部却依旧灯火通明。叶秋和苏沐橙走出房间，一路走到了楼道的尽头——一间宽大的会议室，墙上巨大的电子显示屏显示着"荣耀职业联盟"的战绩排名。',
+      '战绩排名：嘉世战队总排名第十九位，倒数第二。对于曾经创造过联赛三连霸的王牌战队，这个成绩分外刺眼。然而屋里气氛却一点不见沉闷，嘉世的队员们正众星捧月般地围绕着一个人。对于叶秋踏入会议室他们视而不见，眼神中全是冷漠和嘲笑。',
+      '"叶秋，俱乐部已经决定，由新转会来的孙翔接替你的队长职务，一叶之秋今后也由孙翔来操控。"俱乐部经理看到叶秋进来，立刻回头说道。没有事先沟通，没有婉转表达，一来便是冰冷的通知。苏沐橙张口要说话，却被叶秋轻轻拉住，微笑着摇了摇头。',
+      '"你喜欢这个游戏吗？"叶秋忽然转向孙翔问道。孙翔怔了一下，随即冷笑："当然喜欢，不然我为什么要来？""如果喜欢，就把这一切当作是荣耀，而不是炫耀。"叶秋说完转身朝门外走去，到门口时停了一下："一叶之秋……好好对她。"会议室里一片寂静。这个带领嘉世走向三连冠的男人，走出了他奋斗了七年的地方。',
+    ],
+    en:[
+      "\"Click, click, tap, tap...\" A pair of nimble hands danced across keyboard and mouse. The rhythmic tapping was like a brisk musical movement. On the screen, a blaze of light flashed as the opponent fell in a spray of blood. \"Heh.\" Ye Qiu smiled and took the cigarette from his mouth. The silver-white ash had formed a long string, yet hadn't fallen during his intense play.",
+      "He stubbed out the cigarette and his hands flew back to the keyboard. Just as he was about to speak to his opponent, the door burst open. Without turning around, as if he had been waiting for this: \"You came?\" \"I came,\" Su Mucheng replied just as simply. \"Then let's go.\"",
+      "Ye Qiu declined another challenge, removed a card from the Glory login device, and grabbed his jacket on the way out. Though late at night, Excellent Era's clubhouse was still brightly lit. They walked to the end of the corridor — a spacious conference room. An enormous screen on the wall displayed the Glory Professional Alliance rankings.",
+      "The standings: Excellent Era — 19th place, second from bottom. For a team that had achieved three consecutive championships, this was a glaring embarrassment. Yet the atmosphere was lively. The players were gathered around one person. They paid no attention to Ye Qiu; those who glanced at him showed only coldness and scorn.",
+      "\"Ye Qiu, the club has decided. Sun Xiang will take over as captain. 'One Autumn Leaf' will be controlled by him from now on.\" The manager spoke the moment Ye Qiu entered — no prior discussion, just a cold notice. Su Mucheng opened her mouth to protest, but Ye Qiu gently held her back, smiled, and shook his head.",
+      "\"Do you love this game?\" Ye Qiu suddenly turned to Sun Xiang. Sun Xiang sneered: \"Of course I do. Why else would I be here?\" \"If you love it, treat all of this as glory — not showing off.\" Ye Qiu turned and walked toward the door. At the threshold, he paused: \"One Autumn Leaf... take good care of her.\" Silence filled the room. The man who had led Excellent Era to three championships walked out of the place where he had fought for seven years.",
+    ],
+  },
+  'neural-net':{
+    title:'神经网络：从仿生大脑到数字神谕',author:'科普中国',genre:'科普',cover:'🧠',
+    desc:'AI到底是如何诞生的？人工神经网络如何模拟人脑实现智能？一篇通俗易懂的科普。',wordCount:3150,
+    zh:[
+      '神经网络是一种模拟人脑神经元网络的计算架构。它的基本单元是"人工神经元"——每个神经元接收来自外部的数据（如图片、文本、语音），经过处理后输出结果。就像人脑中数百亿个神经元通过突触相互连接一样，人工神经网络由成千上万个这样的"神经元"层层堆叠而成，每一层提取不同层次的特征——底层识别边缘和颜色，中层识别形状，顶层识别物体。',
+      '神经网络的历史可以追溯到1943年。当时神经生理学家麦卡洛克和数学家皮茨提出了第一个神经元数学模型，开创了人工神经网络研究的先河。但此后的几十年间，神经网络发展几经起伏。早期的感知机模型连简单的异或问题都无法解决，导致整个领域被冷落了将近二十年。直到1986年，反向传播算法的提出让多层网络得以有效训练，神经网络才重新回到研究者视野。',
+      '真正让人工智能走进大众视野的，是2016年的AlphaGo。这款由DeepMind开发的围棋AI，以4:1击败了世界冠军李世石。比赛中AlphaGo下出了许多人类棋手从未见过的"神之一手"。赛后柯洁坦言："我唯一能感受到的是它对形势的乐观和自信，而且是绝对的乐观和自信，这一点人类是没有的。"这标志着深度神经网络在特定领域已经超越了人类。',
+      '神经网络的核心机制是"学习"。它不是通过编程指令来执行任务，而是通过大量数据进行训练。以图像识别为例：系统会接收数百万张标注好的图片——"这是一只猫""这是一只狗"。神经网络通过不断调整内部参数，逐渐学会从像素中提取猫与狗的区别特征。这个过程类似于婴儿学习认识世界——看多了，自然就认得了。',
+      '如今，神经网络已经渗透到生活的方方面面。人脸识别解锁手机、语音助手理解你的指令、推荐算法猜中你想看的内容——这些技术背后都是神经网络在运转。医疗领域，FDA批准的IDx-DR系统可以用神经网络分析视网膜照片，检测糖尿病视网膜病变，准确率超过90%。天文学领域，神经网络帮助科学家发现了多颗新的地外行星，准确率达到96%。',
+      '但神经网络并非万能。它需要海量数据才能训练出好效果，而且"黑盒"特性让人难以理解其推理过程。MIT的研究发现，某些人脸识别系统对黑人女性的错误率高达35%——因为训练数据不够多样化。伯克利大学的Michael I. Jordan教授指出：AI在可预见的未来仍无法取代计算机科学的根本原理。OpenAI的Ilya Sutskever则认为，现在判断神经网络能走多远还为时过早——但有一件事可以确定，这项技术正在重塑我们与信息、与世界互动的方式。',
+    ],
+    en:[
+      "A neural network is a computing architecture that mimics the brain's neural networks. Its basic unit is the \"artificial neuron\" — each neuron receives external data (images, text, speech), processes it, and outputs a result. Just as the human brain's hundreds of billions of neurons connect through synapses, artificial neural networks stack thousands of such neurons in layers, each extracting different levels of features — lower layers detect edges and colors, middle layers recognize shapes, and top layers identify objects.",
+      "The history of neural networks dates back to 1943, when neurophysiologist McCulloch and mathematician Pitts proposed the first mathematical neuron model. But the field experienced dramatic ups and downs. Early perceptron models couldn't even solve simple XOR problems, causing the field to be largely abandoned for nearly two decades. It wasn't until 1986, when the backpropagation algorithm was introduced, that multi-layer networks could be effectively trained, reviving interest.",
+      "What truly brought AI into public consciousness was AlphaGo in 2016. This Go-playing AI, developed by DeepMind, defeated world champion Lee Sedol 4:1. During the matches, AlphaGo made moves that no human player had ever seen — 'divine moves.' Afterwards, champion Ke Jie confessed: 'The only thing I could feel was its absolute optimism and confidence in its judgment — something no human possesses.' This marked the moment deep neural networks surpassed human ability in specific domains.",
+      "The core mechanism of neural networks is 'learning.' They aren't programmed with explicit instructions but trained on massive amounts of data. In image recognition, for example, the system receives millions of labeled images — 'this is a cat,' 'this is a dog.' By continuously adjusting internal parameters, the network gradually learns to extract distinguishing features. This process resembles how infants learn to recognize the world — seeing enough examples teaches recognition.",
+      "Today, neural networks permeate every aspect of life. Face recognition unlocks your phone, voice assistants understand your commands, recommendation algorithms guess what you want to watch — behind all of these are neural networks at work. In medicine, the FDA-approved IDx-DR system uses neural networks to analyze retinal photos for diabetic retinopathy with over 90% accuracy. In astronomy, neural networks have helped scientists discover new exoplanets with 96% accuracy.",
+      "But neural networks are not all-powerful. They require vast amounts of data to train effectively, and their 'black box' nature makes their reasoning difficult to understand. MIT research found that certain facial recognition systems had error rates as high as 35% for Black women — because the training data wasn't diverse enough. Berkeley professor Michael I. Jordan notes that AI cannot replace the fundamental principles of computer science in the foreseeable future. OpenAI's Ilya Sutskever believes it's too early to judge how far neural networks can go — but one thing is certain: this technology is reshaping how we interact with information and with the world.",
+    ],
+  },
+  'climate-change':{
+    title:'地球正在发烧：气候变化科普',author:'科普中国',genre:'科普',cover:'🌍',
+    desc:'过去百年全球升温0.74℃。温室效应如何发生？海平面上升有多严重？我们能做什么？',wordCount:3200,
+    zh:[
+      '过去几十年，地球的气候发生了巨大变化。全球气温持续上升，极端天气事件频繁发生，冰川加速消融，海平面不断升高——这些现象都指向一个事实：我们的地球正在"发烧"。2020年全球平均温度较工业化前高出约1.2℃，是有完整气象记录以来最暖的年份之一。这一切的根源，都与人类活动导致的温室气体排放密切相关。',
+      '要理解全球变暖，首先需要了解"温室效应"。太阳辐射以可见光的形式穿透大气到达地球表面，地表吸收后以红外线的形式向外散发热量。然而，大气中的二氧化碳、甲烷等气体对红外线具有强烈的吸收能力，它们像温室的玻璃一样阻挡热量向外太空散发，使热量滞留在地球表面——这就是温室效应。若完全没有温室效应，地表平均温度将是零下18℃，而非现在宜人的15℃。但工业革命以来，人类活动使温室气体浓度急剧上升，温室效应过度加剧，地球因此持续变暖。',
+      '主要的温室气体有四类：二氧化碳、甲烷、氧化亚氮和卤代烃气体。工业革命前，大气中二氧化碳浓度稳定在约280ppm，2022年已飙升至418ppm——主要来自煤炭、石油、天然气的燃烧和森林砍伐。甲烷的温室效应是二氧化碳的20至60倍，主要来自垃圾填埋、水稻田、牛羊反刍和天然气泄漏。氧化亚氮来自农业土壤和氮肥使用。卤代烃气体来自工业制冷剂和发泡剂，不仅加剧温室效应，还破坏臭氧层。',
+      'IPCC多次发布评估报告明确指出：人类活动导致大气、海洋和陆地变暖已是毋庸置疑的事实。过去100年间全球平均气温约上升了0.74℃。进入21世纪后，高温记录不断被打破——2003年瑞士格罗诺镇录得41.5℃，2006年重庆达43℃，北极变暖速度更是全球平均的数倍。在高排放情景下，到本世纪末全球地表平均温度可能较工业化前升高3.3至5.7℃——这个数字足以让地球成为完全不同的世界。',
+      '全球变暖带来的危害是全方位的。冰川加速消融——北极冰层厚度在过去40年减少了约40%，格陵兰岛冰川流失速度在最近五年加快了一倍。海平面上升威胁着马尔代夫等低海拔岛国的生存以及上海、天津等沿海城市的安全。极端天气频发——超级台风、洪涝、干旱、森林火灾的强度和频率不断增加。生态系统遭受冲击——南极阿德利企鹅因冰层融化数量锐减，珊瑚礁因海水升温大规模白化。',
+      '应对气候变化需要减缓和适应两手抓。减缓的核心是减少温室气体排放——1992年联合国通过了《气候变化框架公约》，此后《京都议定书》和《巴黎协定》相继签署。具体措施包括发展可再生能源、提高能效、保护森林以增加碳汇。适应方面则需增强应对气候变化的韧性——建设防洪设施、培育耐旱作物、完善预警系统。对普通人而言，低碳生活同样重要：随手关灯、绿色出行、减少一次性制品、垃圾分类、节约粮食——这些微小的举动汇聚起来，就是保护地球的力量。',
+    ],
+    en:[
+      "Over recent decades, Earth's climate has undergone dramatic change. Global temperatures continue to rise, extreme weather events grow more frequent, glaciers melt at accelerating rates, and sea levels keep climbing — all pointing to one fact: our planet is running a fever. In 2020, global average temperatures were about 1.2°C above pre-industrial levels, making it one of the warmest years on record. The root cause is closely tied to greenhouse gas emissions from human activities.",
+      "To understand global warming, we must first understand the 'greenhouse effect.' Solar radiation passes through the atmosphere as visible light and reaches Earth's surface. The warmed surface then radiates heat outward as infrared radiation. However, atmospheric gases like carbon dioxide and methane strongly absorb infrared radiation — like the glass of a greenhouse, they trap heat from escaping into space. Without any greenhouse effect, Earth's average surface temperature would be -18°C, not the pleasant 15°C we enjoy. But since the Industrial Revolution, human activities have dramatically increased greenhouse gas concentrations, intensifying the effect and causing persistent warming.",
+      "There are four main types of greenhouse gases: carbon dioxide, methane, nitrous oxide, and halogenated gases. Before industrialization, atmospheric CO2 levels held steady at about 280ppm for thousands of years; by 2022, they had surged to 418ppm — primarily from burning coal, oil, and natural gas, plus deforestation. Methane's warming effect is 20-60 times stronger than CO2, mainly from landfills, rice paddies, livestock digestion, and natural gas leaks. Nitrous oxide comes from agricultural soils and fertilizer use. Halogenated gases from industrial refrigerants and foaming agents not only intensify the greenhouse effect but also destroy the ozone layer.",
+      "The IPCC has stated unequivocally in multiple assessment reports: human activities have warmed the atmosphere, ocean, and land. Global average temperatures have risen about 0.74°C over the past 100 years. In the 21st century, temperature records have been repeatedly broken — Switzerland recorded 41.5°C in 2003, Chongqing hit 43°C in 2006, and the Arctic is warming several times faster than the global average. Under high-emission scenarios, global surface temperatures could rise 3.3-5.7°C above pre-industrial levels by the end of this century — enough to make Earth a fundamentally different world.",
+      "The consequences of global warming are comprehensive. Glaciers are melting at accelerating rates — Arctic ice thickness has decreased by about 40% over the past 40 years, and Greenland's ice loss rate has doubled in the last five years. Sea level rise threatens the very existence of low-lying island nations like the Maldives and endangers coastal cities. Extreme weather events — super typhoons, floods, droughts, wildfires — are increasing in both intensity and frequency. Ecosystems are under severe stress: Adélie penguin populations in Antarctica are collapsing as ice melts, and coral reefs are bleaching on a massive scale due to warming oceans.",
+      "Addressing climate change requires both mitigation and adaptation. Mitigation focuses on reducing greenhouse gas emissions — the UN adopted the Framework Convention on Climate Change in 1992, followed by the Kyoto Protocol and Paris Agreement. Key measures include developing renewable energy, improving energy efficiency, and protecting forests to increase carbon sinks. Adaptation means building resilience — constructing flood defenses, breeding drought-resistant crops, and strengthening early warning systems. For ordinary people, low-carbon living matters too: turning off unused lights, choosing green transportation, reducing single-use items, sorting waste, and reducing food waste. These seemingly small actions, when combined, are powerful forces for protecting our planet.",
+    ],
+  },
+};
+
+// ============================================================
+// 3. 认证
+// ============================================================
+let authMode='login';
+function renderNav(){
+  const n=document.getElementById('nav');
+  if(session){
+    n.innerHTML='<span style="font-size:0.82em;cursor:pointer" id="profLink">👤 <strong>'+escapeHtml(profile?.username||session.user.email)+'</strong></span> '
+      +'<button class="btn sm" id="uploadBtn2">📤 上传</button> '
+      +'<button class="btn sm" id="logoutBtn">退出</button> '
+      +'<button class="btn sm" id="themeBtn1">🌓</button>';
+    document.getElementById('profLink').onclick=openProf;
+    document.getElementById('uploadBtn2').onclick=openUp;
+    document.getElementById('logoutBtn').onclick=doLogout;
+    document.getElementById('themeBtn1').onclick=toggleTheme;
+  }else{
+    n.innerHTML='<button class="btn a sm" id="loginBtn">👤 登录</button> '
+      +'<button class="btn sm" id="regBtn">📝 注册</button> '
+      +'<button class="btn sm" id="themeBtn2">🌓</button>';
+    document.getElementById('loginBtn').onclick=function(){openAuth('login');};
+    document.getElementById('regBtn').onclick=function(){openAuth('register');};
+    document.getElementById('themeBtn2').onclick=toggleTheme;
+  }
+}
+function openAuth(mode){
+  authMode=mode;
+  document.getElementById('authTitle').textContent=mode==='login'?'👤 登录':'📝 注册';
+  document.getElementById('authSub').textContent=mode==='login'?'登录以同步翻译贡献':'注册成为语桥社区成员';
+  document.getElementById('authBtn').textContent=mode==='login'?'登录':'注册';
+  document.getElementById('authToggle').textContent=mode==='login'?'没有账号？去注册':'已有账号？去登录';
+  document.getElementById('authName').style.display=mode==='login'?'none':'block';
+  document.getElementById('authModal').classList.add('on');
+}
+function toggleAuth(){closeAuth();openAuth(authMode==='login'?'register':'login');}
+function closeAuth(){document.getElementById('authModal').classList.remove('on');}
+async function doAuth(){
+  if(!requireDB()) return;
+  const email=document.getElementById('authEmail').value.trim();
+  const pass=document.getElementById('authPass').value;
+  const name=document.getElementById('authName').value.trim();
+  if(!email||!pass){alert('请填写邮箱和密码');return;}
+  if(pass.length<6){alert('密码至少6位');return;}
+  let r;
+  if(authMode==='login'){
+    r=await db.auth.signInWithPassword({email,password:pass});
+  }else{
+    if(!name){alert('请填写用户名');return;}
+    r=await db.auth.signUp({email,password:pass,options:{data:{username:name}}});
+    if(!r.error){
+      // 手动插入profile（触发器已被移除）
+      await db.from('profiles').insert({id:r.data.user.id,username:name});
+    }
+  }
+  if(r.error){
+    if(r.error.message.includes('rate limit')||r.error.message.includes('exceeded')){
+      alert('注册暂时受限（服务器频率限制）。\n\n请稍后重试，或使用演示账号：\nalice@demo.com / bob@demo.com\n密码：demo1234');
+    }else{
+      alert('操作失败：'+r.error.message);
+    }
+    return;
+  }
+  session=r.data.session;
+  await loadProfile();
+  closeAuth();
+  renderNav();
+  renderLib();
+}
+async function doLogout(){if(db)await db.auth.signOut();session=null;profile=null;renderNav();renderLib();}
+async function loadProfile(){
+  if(!session||!db)return;
+  const{data}=await db.from('profiles').select('*').eq('id',session.user.id).single();
+  profile=data;
+}
+
+// ========== 个人主页 ==========
+async function openProf(){
+  if(!session||!db)return;
+  document.getElementById('profName').textContent='👤 '+(profile?.username||session.user.email);
+  document.getElementById('profBio').textContent=profile?.bio||'这个人很懒，什么都没写';
+  document.getElementById('profContribs').textContent=profile?.contributions||0;
+
+  // 统计评论数
+  let commentCount=0;
+  try{const{count}=await db.from('comments').select('*',{count:'exact',head:true}).eq('author_id',session.user.id);commentCount=count||0;}catch(e){}
+  document.getElementById('profComments').textContent=commentCount;
+
+  // 统计参与书籍
+  let bookSet=new Set();
+  try{
+    const{data:tData}=await db.from('translations').select('book_id').eq('author_id',session.user.id);
+    if(tData) tData.forEach(t=>bookSet.add(t.book_id));
+    const{data:cData}=await db.from('comments').select('book_id').eq('author_id',session.user.id);
+    if(cData) cData.forEach(c=>bookSet.add(c.book_id));
+  }catch(e){}
+  document.getElementById('profBooks').textContent=bookSet.size;
+
+  // 最近贡献
+  try{
+    const{data:recent}=await db.from('translations').select('book_id,paragraph_index,content,created_at').eq('author_id',session.user.id).order('created_at',{ascending:false}).limit(5);
+    if(recent&&recent.length>0){
+      document.getElementById('profActivity').innerHTML=recent.map(r=>{
+        const book=PRELOAD[r.book_id];const bname=book?book.title:r.book_id;
+        const d=new Date(r.created_at);
+        return'<div style="margin-bottom:4px;padding:4px 6px;background:var(--hl);border-radius:6px">📖 <strong>'+escapeHtml(bname)+'</strong> §'+(r.paragraph_index+1)+' · '+escapeHtml(r.content.substring(0,80))+'... <span style="font-size:0.8em">'+d.toLocaleString('zh-CN')+'</span></div>';
+      }).join('');
+    }else{
+      document.getElementById('profActivity').textContent='暂无贡献记录。去改进一段翻译吧！';
+    }
+  }catch(e){document.getElementById('profActivity').textContent='加载失败';}
+  document.getElementById('profM').classList.add('on');
+}
+function closeProf(){document.getElementById('profM').classList.remove('on');}
+
+// ========== 逐段翻译 ==========
+async function translatePara(i){
+  if(!session||!db){alert('请先登录');return;}
+  const zh=curBook.zh[i];if(!zh)return;
+  // 标记按钮状态
+  const btns=document.querySelectorAll('#rightC button');
+  let btn=null;
+  btns.forEach(b=>{if(b.textContent.includes('翻译此段')&&b.closest('.para')?.getAttribute('data-i')==String(i))btn=b;});
+  if(btn){btn.disabled=true;btn.textContent='⏳ 翻译中...';}
+  try{
+    let trans='';
+    try{
+      const r=await fetch('https://lingva.ml/api/v1/zh/en/'+encodeURIComponent(zh),{signal:AbortSignal.timeout(15000)});
+      const d=await r.json();if(d.translation)trans=d.translation;
+    }catch(e){}
+    if(!trans){
+      try{
+        const r=await fetch('https://translate.googleapis.com/translate_a/single?client=gtx&sl=zh-CN&tl=en&dt=t&q='+encodeURIComponent(zh.substring(0,500)),{signal:AbortSignal.timeout(10000)});
+        const d=await r.json();if(d&&d[0])trans=d[0].map(x=>x[0]).join('');
+      }catch(e){}
+    }
+    if(!trans){if(btn){btn.disabled=false;btn.textContent='🌐 翻译此段';}alert('翻译失败，请稍后重试');return;}
+    await db.from('translations').insert({book_id:curBook.id,paragraph_index:i,language:curLang,version:1,author_name:'AI',content:trans});
+    await loadCloudVersions();renderR();showReport();
+  }catch(e){alert('翻译失败：'+e.message);if(btn){btn.disabled=false;btn.textContent='🌐 翻译此段';}}
+}
+
+// 智能分段：自动检测换行格式
+function smartSplit(text){
+  let paras=text.split(/\n\s*\n/).filter(p=>p.trim());
+  if(paras.length<=2&&text.length>5000){
+    const lines=text.split(/\n/).filter(l=>l.trim());
+    const merged=[];let buf='';
+    for(const line of lines){const t=line.trim();if(!t)continue;if(t.length<20&&buf){buf+='\n'+t;}else{if(buf)merged.push(buf.trim());buf=t;}}
+    if(buf.trim())merged.push(buf.trim());if(merged.length>paras.length)paras=merged;
+  }
+  if(paras.length<=2&&text.length>2000){
+    paras=text.split(/(?<=[。！？\.\!\?])/).filter(p=>p.trim());
+    const merged=[];let buf='';
+    for(const s of paras){if(buf.length+s.length>800){merged.push(buf.trim());buf=s;}else{buf+=s;}}
+    if(buf.trim())merged.push(buf.trim());if(merged.length>1)paras=merged;
+  }
+  return paras.filter(p=>p.length>0);
+}
+
+// ========== 上传新书 ==========
+function openUp(){
+  if(!session){alert('请先登录');return;}
+  document.getElementById('upM').classList.add('on');
+}
+function closeUp(){document.getElementById('upM').classList.remove('on');}
+let uploading=false;
+async function doUp(btn){
+  if(uploading)return;
+  const title=document.getElementById('upTitle').value.trim();
+  const author=document.getElementById('upAuthor').value.trim()||'佚名';
+  const genre=document.getElementById('upGenre').value;
+  const file=document.getElementById('upFile').files[0];
+  if(!title){alert('请输入书名');return;}
+  if(!file){alert('请选择文件');return;}
+
+  uploading=true;
+  if(btn){btn.disabled=true;btn.textContent='⏳ 读取文件中...';}
+  try{
+    const text=await new Promise((ok,fail)=>{
+      const r=new FileReader();r.onload=e=>ok(e.target.result);r.onerror=()=>fail(new Error('读取失败'));r.readAsText(file,'UTF-8');
+    });
+    if(!text||text.trim().length<20){alert('文件内容过短');uploading=false;if(btn){btn.disabled=false;btn.textContent='📤 上传';}return;}
+
+    if(btn)btn.textContent='⏳ 分段处理中...';
+    const bookId='u-'+Date.now()+'-'+Math.random().toString(36).substring(2,6);
+    const paras=smartSplit(text);
+    if(paras.length===0){alert('未能识别段落');uploading=false;if(btn){btn.disabled=false;btn.textContent='📤 上传';}return;}
+
+    localStorage.setItem('rb_raw_'+bookId,text);
+    if(db){
+      if(btn)btn.textContent='⏳ 存入云端...';
+      await db.from('books').insert({id:bookId,title,author,genre,cover:'📖',description:text.substring(0,5000),word_count:text.length,uploader_id:session.user.id});
+      for(let i=0;i<paras.length;i+=100){
+        if(btn)btn.textContent='⏳ '+(Math.min(i+100,paras.length))+'/'+paras.length+' 段...';
+        const batch=paras.slice(i,i+100).map((p,j)=>({book_id:bookId,paragraph_index:i+j,language:'zh',version:1,author_name:'AI',content:p}));
+        await db.from('translations').insert(batch);
+      }
+      // 验证写入：从数据库读回确认
+      if(btn)btn.textContent='⏳ 验证数据...';
+      const{count:verifyCount}=await db.from('translations').select('*',{count:'exact',head:true}).eq('book_id',bookId).eq('language','zh');
+      if(!verifyCount||verifyCount<paras.length*0.8){
+        throw new Error('数据验证失败：期望'+paras.length+'段，云端仅存'+(verifyCount||0)+'段。请重试。');
+      }
+    }
+
+    PRELOAD[bookId]={title,author,genre,cover:'📖',desc:'用户上传 · 等待社区翻译',wordCount:text.length,zh:paras,en:paras.map(()=>'')};
+    if(btn){btn.textContent='✅ 上传完成';}
+    setTimeout(()=>{closeUp();renderLib();},600);
+    alert('✅ 上传成功！'+paras.length+'段，已加入资料库。\n点击段落旁的"🌐翻译"按钮逐段翻译，或等待社区成员贡献。');
+  }catch(e){alert('上传失败：'+e.message);}
+  uploading=false;
+  if(btn){btn.disabled=false;btn.textContent='📤 上传';}
+}
+
+// ============================================================
+// 4. 资料库
+// ============================================================
+let filterTag='all';
+async function renderLib(){
+  let books=Object.entries(PRELOAD).map(([id,b])=>({id,...b}));
+  // 从Supabase加载用户上传的书籍（每次打开资料库都重新拉取）
+  if(db){try{
+    const{data}=await db.from('books').select('*');
+    if(data) data.forEach(b=>{if(!PRELOAD[b.id]) books.push({id:b.id,title:b.title,author:b.author,genre:b.genre,cover:b.cover||'📖',desc:b.description||'',wordCount:b.word_count||0,isUploaded:true,uploaderId:b.uploader_id});});
+    document.getElementById('dbStatus').textContent='✅ 已连接';
+    document.getElementById('dbStatus').style.color='var(--grammar-prep)';
+  }catch(e){console.warn('Load books failed');document.getElementById('dbStatus').textContent='⚠ 离线';document.getElementById('dbStatus').style.color='#f59e0b';}}
+  else{document.getElementById('dbStatus').textContent='⚠ 离线';document.getElementById('dbStatus').style.color='#f59e0b';}
+  if(filterTag!=='all') books=books.filter(b=>b.genre===filterTag);
+  document.getElementById('bookGrid').innerHTML=books.map(b=>{
+    return'<div class="book-card" onclick="openB(\''+b.id+'\')">'
+      +'<div class="cover">'+b.cover+'</div>'
+      +'<div class="title">'+b.title+'</div>'
+      +'<div class="author">'+b.author+'</div>'
+      +'<span class="genre">'+b.genre+'</span>'
+      +'<div class="meta"><span>📄 '+(b.wordCount||0)+'字</span>'+(b.isUploaded?'<span style="font-size:0.75em;color:var(--s)"> · 📤 用户上传</span>':'')+'</div>'
+      +'</div>';
+  }).join('');
+}
+function filter(g,el){filterTag=g;document.querySelectorAll('.lib-tags span').forEach(t=>t.classList.remove('on'));el.classList.add('on');renderLib();}
+function goLib(){
+  curBook=null;
+  document.getElementById('libPage').style.display='block';
+  document.getElementById('readerPage').classList.remove('on');
+  document.getElementById('tocPanel').style.display='none';
+  history.pushState({view:'library'},'','#');
+  renderLib();
+}
+
+// ============================================================
+// 5. 阅读器
+// ============================================================
+let curBook=null,curLang='en',editIdx=null,commVersions={},commComments={},realtimeChannel=null,curChapter=0;
+
+async function openB(id){
+  let book=PRELOAD[id];
+  if(!book){
+    if(db){try{
+      const{data:bData}=await db.from('books').select('*').eq('id',id).single();
+      if(bData){
+        // 分页加载全部段落（Supabase默认limit 1000，需分批）
+        const totalCount=bData.word_count>100000?Math.ceil(bData.word_count/200):500;
+        const allParas=[];let hasMore=true,offset=0;
+        while(hasMore){
+          const{data:tData}=await db.from('translations').select('content,paragraph_index').eq('book_id',id).eq('language','zh').order('paragraph_index',{ascending:true}).range(offset,offset+999);
+          if(tData&&tData.length>0){tData.forEach(t=>{allParas[t.paragraph_index]=t.content;});offset+=1000;}
+          if(!tData||tData.length<1000)hasMore=false;
+        }
+        const zh=allParas.filter(p=>p&&p.trim());
+        if(zh.length>0){
+          book={title:bData.title,author:bData.author,genre:bData.genre,cover:bData.cover||'📖',desc:bData.description||'',wordCount:bData.word_count||0,zh,en:zh.map(()=>''),isUploaded:true,uploaderId:bData.uploader_id};
+          PRELOAD[id]=book;try{localStorage.setItem('rb_raw_'+id,zh.join('\n\n'));}catch(e){}
+        }
+      }
+    }catch(e){console.warn('Supabase加载失败:',e.message);}}
+    if(!book){const raw=localStorage.getItem('rb_raw_'+id);if(raw){const zh=smartSplit(raw);if(zh.length>0){book={zh,en:zh.map(()=>''),isUploaded:true};PRELOAD[id]=book;}}}
+  }
+  if(!book){alert('书籍未找到。');return;}
+  if(!book.zh||book.zh.length===0){alert('书籍内容为空。');return;}
+  curBook=book;curBook.id=id;curChapter=0;
+  try{userActive=JSON.parse(localStorage.getItem('rb_active_'+id)||'{}');}catch(e){userActive={};}
+  document.getElementById('libPage').style.display='none';
+  document.getElementById('readerPage').classList.add('on');
+  document.getElementById('rbTitle').textContent=curBook.title+' · '+curBook.author;
+  document.getElementById('tlLbl').textContent={en:'English',ja:'日本語',ko:'한국어',fr:'Français'}[curLang]||'English';
+
+  // 构建目录
+  buildTOC();
+
+  commVersions={};commComments={};
+  await loadCloudVersions();
+  await loadComments();
+  subscribeRealtime();
+
+  renderL();renderR();updateWC();syncScroll();
+  // 显示删除按钮（上传的书 + 已登录即可删除，不严格校验uploaderId）
+  const delBtn=document.getElementById('delBookBtn');
+  const dlBtn=document.getElementById('dlBookBtn');
+  const utBtn=document.getElementById('upTransBtn');
+  if(curBook.isUploaded&&session){
+    delBtn.style.display='inline-flex';
+    dlBtn.style.display='inline-flex';
+    utBtn.style.display='inline-flex';
+  }else{
+    delBtn.style.display='none';
+    dlBtn.style.display=curBook.isUploaded?'inline-flex':'none';
+    utBtn.style.display=curBook.isUploaded&&session?'inline-flex':'none';
+  }
+  // 浏览器返回键支持
+  history.pushState({view:'reader',bookId:id},'', '#book='+id);
+}
+
+// 目录构建
+let gChapters=[];
+
+function buildTOC(){
+  const toc=document.getElementById('tocList');if(!toc)return;
+  const zh=curBook.zh;if(!zh||zh.length<3){gChapters=[];toc.innerHTML='';document.getElementById('chapNav').style.display='none';return;}
+  gChapters=[];
+
+  // 找出所有候选章节（先收集再过滤）
+  const SKIP=/^(注释|注解|注|译者序|作者序|前言|序言|后记|跋|附录|参考文献|出版信息|版权|ISBN|定价|印次|版次|印刷|书号|策划|责编|编辑|设计|排版|出品|荣誉|推荐语|目录|楔子|引子|尾声|番外)/;
+  const candidates=[];
+  zh.forEach((p,i)=>{
+    let title='';
+    const m1=p.match(/第[一二三四五六七八九十百千\d]+[章节回]/);
+    if(m1){
+      const rest=p.substring(m1.index+m1[0].length).trim().replace(/^[　\s]+/,'');
+      if(!SKIP.test(rest)&&rest.length<80)title=m1[0]+(rest?' '+rest.substring(0,18):'');
+      else if(!rest||rest.length<3)title=m1[0];
+    }
+    if(!title){const m2=p.match(/Chapter\s*\d+|CHAPTER\s*[IVX]+/i);if(m2)title=p.substring(m2.index,Math.min(m2.index+30,p.length)).trim();}
+    if(!title&&p.length<20&&/^\d+$/.test(p))title='第'+p+'章';
+    if(!title){const m4=p.match(/^(\d{1,3})[\.\、\)）]\s*\S/);if(m4&&p.length<100)title=m4[0];}
+    if(!title&&!curBook.isUploaded&&p.length<40&&p.length>3&&!/[，。！？,\.!\?：:；;]/.test(p)&&!SKIP.test(p))title=p.trim();
+    if(title)candidates.push({title,index:i});
+  });
+
+  // 核心算法：用段落间距区分假目录(无正文,间隙<3段)和真章节(有正文,间隙≥3段)
+  // 从后往前找：第一个间隙大的候选就是真章节开始的位置
+  let realStart=0;
+  for(let i=1;i<candidates.length;i++){
+    const gap=candidates[i].index-candidates[i-1].index;
+    if(gap>=5){realStart=i;break;} // 间隙≥5段 → 从这里开始是真章节
+  }
+  // 如果找不到明显间隙但候选很多(>50)，说明整本书都是假目录结构
+  if(realStart===0&&candidates.length>50){
+    // 找最大间隙的位置
+    let maxGap=0,maxIdx=0;
+    for(let i=1;i<candidates.length;i++){
+      const gap=candidates[i].index-candidates[i-1].index;
+      if(gap>maxGap){maxGap=gap;maxIdx=i;}
+    }
+    if(maxGap>=3)realStart=maxIdx;
+  }
+
+  // 只保留真章节
+  gChapters=candidates.slice(realStart);
+  // 去重：标题相同的相邻项只保留一个
+  gChapters=gChapters.filter((c,i)=>i===0||c.title!==gChapters[i-1].title);
+  if(gChapters.length>200) gChapters=gChapters.slice(0,200);
+
+  if(gChapters.length===0){toc.innerHTML='<span style="font-size:0.75em;color:var(--s)">未检测到章节标题</span>';document.getElementById('chapNav').style.display='none';return;}
+  const display=gChapters.slice(0,200);
+  toc.innerHTML=display.map((c,idx)=>'<div style="padding:5px 8px;cursor:pointer;font-size:0.78em;border-radius:4px;margin-bottom:2px" onclick="scrollToPara('+c.index+')" onmouseover="this.style.background=\'var(--hl)\'" onmouseout="this.style.background=\'transparent\'"><span style="color:var(--s);font-size:0.8em">'+(idx+1)+'.</span> '+escapeHtml(c.title)+'</div>').join('');
+  if(gChapters.length>200) toc.innerHTML+='<div style="font-size:0.7em;color:var(--s);padding:4px">... 还有'+(gChapters.length-200)+'条未显示</div>';
+  document.getElementById('chapNav').style.display='flex';
+  updateChapNav(0);
+}
+
+function scrollToPara(i){
+  // 找到目标段落所属章节并切换
+  for(let c=0;c<gChapters.length;c++){
+    const nextStart=(c+1<gChapters.length)?gChapters[c+1].index:curBook.zh.length;
+    if(i>=gChapters[c].index&&i<nextStart){curChapter=c;break;}
+  }
+  renderL();renderR();updateWC();syncScroll();updateChapNav(curChapter);
+  setTimeout(()=>{
+    const target=document.querySelector('#leftC .para[data-i="'+i+'"]')||document.querySelector('#rightC .para[data-i="'+i+'"]');
+    if(target)target.scrollIntoView({behavior:'smooth',block:'start'});
+  },200);
+}
+
+// 上下章导航
+function updateChapNav(curIdx){
+  document.getElementById('chapPrev').disabled=(curIdx<=0);
+  document.getElementById('chapNext').disabled=(curIdx>=gChapters.length-1);
+  document.getElementById('chapLabel').textContent=(curIdx+1)+'/'+gChapters.length;
+}
+function prevChapter(){
+  if(curChapter>0){curChapter--;renderL();renderR();updateWC();syncScroll();updateChapNav(curChapter);document.getElementById('leftP').scrollTop=0;}
+}
+function nextChapter(){
+  if(curChapter<gChapters.length-1){curChapter++;renderL();renderR();updateWC();syncScroll();updateChapNav(curChapter);document.getElementById('leftP').scrollTop=0;}
+}
+
+async function loadCloudVersions(){
+  if(!db)return;
+  try{
+    const allVers=[];let hasMore=true,offset=0;
+    while(hasMore){
+      const{data}=await db.from('translations').select('*').eq('book_id',curBook.id).eq('language',curLang).order('version',{ascending:true}).range(offset,offset+999);
+      if(data&&data.length>0){allVers.push(...data);offset+=1000;}
+      if(!data||data.length<1000)hasMore=false;
+    }
+    allVers.forEach(v=>{const k=v.paragraph_index+'-'+curLang;if(!commVersions[k])commVersions[k]=[];commVersions[k].push(v);});
+  }catch(e){console.warn('Load versions failed');}
+}
+async function loadComments(){
+  if(!db)return;
+  try{const{data}=await db.from('comments').select('*').eq('book_id',curBook.id).order('created_at',{ascending:true});
+  if(data){data.forEach(c=>{const k=c.paragraph_index;if(!commComments[k])commComments[k]=[];commComments[k].push(c);});}}catch(e){console.warn('Load comments failed');}
+}
+
+function subscribeRealtime(){
+  if(!db)return;
+  if(realtimeChannel)db.removeChannel(realtimeChannel);
+  realtimeChannel=db.channel('rb-'+curBook.id)
+    .on('postgres_changes',{event:'INSERT',schema:'public',table:'translations',filter:'book_id=eq.'+curBook.id},async()=>{
+      await loadCloudVersions();renderR();showReport();
+    })
+    .on('postgres_changes',{event:'INSERT',schema:'public',table:'comments',filter:'book_id=eq.'+curBook.id},async()=>{
+      await loadComments();renderR();
+    })
+    .subscribe();
+}
+
+// 用户版本选择偏好（localStorage存储）
+let userActive={};
+
+function getActive(pi,lang){
+  const k=pi+'-'+lang;
+  const cloud=commVersions[k];
+  if(cloud&&cloud.length>0){
+    // 检查用户是否手动选择了某个版本
+    const uk=curBook?.id+'-'+pi+'-'+lang;
+    const chosen=userActive[uk];
+    if(chosen){const found=cloud.find(v=>v.version===chosen);if(found)return found;}
+    // 默认返回最新版本
+    return cloud[cloud.length-1];
+  }
+  const pre=curBook[lang];
+  if(pre&&pre[pi]) return {version:1,author_name:'AI',content:pre[pi]};
+  return null;
+}
+
+function saveUserActive(pi,lang,ver){
+  const uk=curBook.id+'-'+pi+'-'+lang;
+  userActive[uk]=ver;
+  try{localStorage.setItem('rb_active_'+curBook.id,JSON.stringify(userActive));}catch(e){}
+}
+
+function getVersions(pi,lang){
+  const k=pi+'-'+lang;
+  return commVersions[k]||[];
+}
+
+// 当前章节的段落范围
+function chapterRange(){
+  if(!gChapters.length) return {start:0,end:curBook.zh.length};
+  const start=gChapters[curChapter]?gChapters[curChapter].index:0;
+  const end=(curChapter+1<gChapters.length)?gChapters[curChapter+1].index:curBook.zh.length;
+  return {start,end};
+}
+
+function renderL(){
+  const c=document.getElementById('leftC');
+  const zh=curBook.zh;if(!zh)return;
+  const r=chapterRange();
+  c.innerHTML=zh.slice(r.start,r.end).map((t,i)=>{
+    const absIdx=r.start+i;
+    return'<div class="para" data-i="'+absIdx+'"><span class="n">§ '+(absIdx+1)+'</span>'+escapeHtml(t)+'</div>';
+  }).join('');
+}
+
+function renderR(){
+  const c=document.getElementById('rightC');
+  const zh=curBook.zh;if(!zh)return;
+  const r=chapterRange();
+  c.innerHTML=zh.slice(r.start,r.end).map((_,j)=>{const i=r.start+j;
+    const v=getActive(i,curLang);const has=v&&v.content;
+    const vs=getVersions(i,curLang);
+    const humanVs=vs.filter(x=>x.author_name!=='AI');
+    const comments=commComments[i]||[];
+    // 协作标记：有改进的段落显示醒目标记
+    let collabTag='';
+    if(humanVs.length>0) collabTag=' <span style="background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff;font-size:0.78em;padding:3px 10px;border-radius:10px;font-weight:700;cursor:pointer;box-shadow:0 2px 8px rgba(37,99,235,0.3);animation:collabPulse 2s ease-in-out infinite" onclick="openVr('+i+')" title="点击查看所有版本">👥 '+humanVs.length+'人改进 · v'+vs.length+'</span>';
+    else if(vs.length>1) collabTag=' <span style="background:var(--hl);color:var(--a);font-size:0.78em;padding:3px 10px;border-radius:10px;font-weight:600;cursor:pointer" onclick="openVr('+i+')">v'+vs.length+'</span>';
+    let transContent;
+    if(has&&v.content&&v.content.length>0){
+      transContent=escapeHtml(v.content);
+    }else if(has&&(!v.content||v.content.length===0)){
+      transContent='<span style="color:var(--s);font-style:italic">⏳ 等待翻译...</span>';
+    }else{
+      transContent='<span style="color:var(--s);font-style:italic">⏳ 等待翻译...</span>';
+    }
+    return'<div class="para'+(has&&v.content?' just-done':'')+'" data-i="'+i+'">'
+      +'<span class="n" style="display:flex;justify-content:space-between;align-items:center">'
+      +'<span>§ '+(i+1)+(v&&v.author_name&&v.author_name!=='AI'?' · '+v.author_name:'')+'</span>'
+      +collabTag
+      +'</span>'
+      +transContent
+      +'<div style="display:flex;gap:6px;margin-top:6px">'
+      +(session?'<button class="btn sm" onclick="openEd('+i+')">✏️ 改写</button>':'')
+      +'<button class="btn sm" onclick="openComment('+i+')">💬 评论'+(comments.length>0?' ('+comments.length+')':'')+'</button>'
+      +'</div>'
+      +(comments.length>0?'<div class="comments-section" style="margin-top:6px">'+comments.map(c=>'<div class="comment-item"><span class="c-author">'+escapeHtml(c.author_name)+'</span><span class="c-text">'+escapeHtml(c.content)+'</span></div>').join('')+'</div>':'')
+      +'<div class="comment-input-row" id="commentRow'+i+'" style="display:none;margin-top:4px"><input id="commentInput'+i+'" placeholder="写评论..."><button onclick="doComment('+i+')">发送</button></div>'
+      +'</div>';
+  }).join('');
+  showReport();updateWC();
+}
+
+function showReport(){
+  const zh=curBook.zh;if(!zh)return;
+  let edits=0,contribs=new Set();
+  for(let i=0;i<zh.length;i++){
+    const vs=getVersions(i,curLang);
+    vs.forEach(v=>{if(v.author_name!=='AI'){edits++;contribs.add(v.author_name);}});
+  }
+  const editedParas=zh.filter((_,i)=>(commVersions[i+'-'+curLang]||[]).some(v=>v.author_name!=='AI')).length;
+  document.getElementById('report').style.display='block';
+  document.getElementById('report').innerHTML='<h3>📊 阅读报告</h3><div class="report-grid">'
+    +'<div class="report-item"><div class="num">'+zh.length+'</div><div class="lbl">📖 段落</div></div>'
+    +'<div class="report-item"><div class="num">'+zh.reduce((s,t)=>s+t.length,0)+'</div><div class="lbl">📝 总字数</div></div>'
+    +'<div class="report-item"><div class="num">'+editedParas+'</div><div class="lbl">✏️ 被改进</div></div>'
+    +'<div class="report-item"><div class="num">'+contribs.size+'</div><div class="lbl">👥 贡献者</div></div>'
+    +'<div class="report-item"><div class="num">'+(commComments?Object.values(commComments).flat().length:0)+'</div><div class="lbl">💬 评论</div></div>'
+    +'</div>';
+}
+
+function updateWC(){
+  const zh=curBook.zh;if(!zh)return;
+  document.getElementById('wc').textContent=' · '+zh.length+'段 · '+zh.reduce((s,t)=>s+t.length,0)+'字';
+}
+
+function syncScroll(){
+  const L=document.getElementById('leftP'),R=document.getElementById('rightP');let s=false;
+  function sync(a,b){if(s)return;s=true;const r=a.scrollTop/(a.scrollHeight-a.clientHeight||1);b.scrollTop=r*(b.scrollHeight-b.clientHeight||1);requestAnimationFrame(()=>{s=false;});}
+  L.onscroll=()=>sync(L,R);R.onscroll=()=>sync(R,L);
+}
+
+function setL(l,el){
+  curLang=l;
+  document.querySelectorAll('.reader-top button[onclick^="setL"]').forEach(b=>{b.style.background='var(--pbg)';b.style.color='var(--s)';});
+  el.style.background='var(--a)';el.style.color='#fff';
+  document.getElementById('tlLbl').textContent={en:'English',ja:'日本語',ko:'한국어',fr:'Français'}[l]||'English';
+  loadCloudVersions().then(()=>{renderR();showReport();});
+}
+
+// ============================================================
+// 6. 编辑翻译
+// ============================================================
+function openEd(i){
+  if(!session){alert('请先登录');return;}
+  editIdx=i;
+  const v=getActive(i,curLang);
+  document.getElementById('edI').textContent=i+1;
+  document.getElementById('edA').textContent=v?v.author_name:'AI';
+  document.getElementById('edO').textContent=curBook.zh[i];
+  document.getElementById('edT').value=v?v.content:'';
+  const vs=getVersions(i,curLang);
+  document.getElementById('edV').textContent=vs.length+1;
+  document.getElementById('edM').classList.add('on');
+}
+function closeEd(){document.getElementById('edM').classList.remove('on');editIdx=null;}
+async function doEd(){
+  if(editIdx===null)return;
+  if(!requireDB())return;
+  const t=document.getElementById('edT').value.trim();if(!t){alert('请输入翻译');return;}
+  const vs=getVersions(editIdx,curLang);
+  const authorName=profile?.username||session.user.email;
+  const{error}=await db.from('translations').insert({
+    book_id:curBook.id,paragraph_index:editIdx,language:curLang,
+    version:vs.length+1,author_id:session.user.id,author_name:authorName,content:t
+  });
+  if(error){alert('保存失败：'+error.message);return;}
+  // 更新贡献计数
+  await db.from('profiles').update({contributions:(profile?.contributions||0)+1}).eq('id',session.user.id);
+  await loadCloudVersions();
+  closeEd();renderR();showReport();
+}
+
+// ============================================================
+// 7. 评论
+// ============================================================
+function openComment(i){
+  if(!session){alert('请先登录');return;}
+  const row=document.getElementById('commentRow'+i);
+  row.style.display=row.style.display==='none'?'flex':'none';
+  if(row.style.display!=='none') document.getElementById('commentInput'+i).focus();
+}
+async function doComment(i){
+  if(!requireDB())return;
+  const input=document.getElementById('commentInput'+i);
+  const t=input.value.trim();if(!t)return;
+  const authorName=profile?.username||session.user.email;
+  const{error}=await db.from('comments').insert({
+    book_id:curBook.id,paragraph_index:i,author_id:session.user.id,author_name:authorName,content:t
+  });
+  if(error){alert('评论失败：'+error.message);return;}
+  input.value='';
+  await loadComments();
+  renderR();
+}
+
+// ============================================================
+// 8. 版本历史
+// ============================================================
+function openVr(i){
+  const vs=getVersions(i,curLang);
+  let displayVs=vs;
+  if(displayVs.length===0){
+    const pre=curBook[curLang];
+    if(pre&&pre[i]) displayVs=[{version:1,author_name:'AI',content:pre[i]}];
+  }
+  const currentActive=getActive(i,curLang);
+  document.getElementById('vrT').textContent='段落'+(i+1)+' · '+displayVs.length+'个版本 · 当前显示：v'+(currentActive?currentActive.version:'?')+' ('+(currentActive?.author_name||'AI')+')';
+  document.getElementById('vrL').innerHTML=displayVs.map(v=>{
+    const isCur=currentActive&&v.version===currentActive.version;
+    return'<li onclick="setActiveV('+i+','+v.version+')" style="'+(isCur?'background:var(--hl);border-color:var(--a);border-width:2px':'')+'"><div class="vh"><strong>'+escapeHtml(v.author_name)+'</strong><span>v'+v.version+(isCur?' ← 当前显示':'')+'</span></div><div class="vt">'+escapeHtml(v.content.substring(0,400))+'</div></li>';
+  }).join('');
+  if(displayVs.length>=2){
+    document.getElementById('vrDiff').style.display='block';
+    document.getElementById('vrDiffC').innerHTML=simpleDiff(displayVs[displayVs.length-2].content,displayVs[displayVs.length-1].content);
+  }else{document.getElementById('vrDiff').style.display='none';}
+  document.getElementById('vrM').classList.add('on');
+}
+function closeVr(){document.getElementById('vrM').classList.remove('on');}
+async function setActiveV(pi,vn){
+  // 保存用户的版本选择
+  saveUserActive(pi,curLang,vn);
+  closeVr();renderR();showReport();
+  // 临时提示
+  const el=document.querySelector('#rightC .para[data-i="'+pi+'"]');
+  if(el){el.classList.add('just-done');setTimeout(()=>el.classList.remove('just-done'),600);}
+}
+
+function simpleDiff(o,n){
+  const ow=o.split(/(\s+|[,.!?;:'"()-])/),nw=n.split(/(\s+|[,.!?;:'"()-])/);
+  let r='',oi=0,ni=0;
+  while(oi<ow.length||ni<nw.length){
+    if(oi>=ow.length){r+='<span class="diff-add">'+escapeHtml(nw[ni]||'')+'</span>';ni++}
+    else if(ni>=nw.length){r+='<span class="diff-del">'+escapeHtml(ow[oi]||'')+'</span>';oi++}
+    else if(ow[oi]===nw[ni]){r+=escapeHtml(ow[oi]);oi++;ni++}
+    else{let found=false;
+      for(let l=1;l<6&&ni+l<nw.length;l++){if(ow[oi]===nw[ni+l]){for(let k=0;k<l;k++)r+='<span class="diff-add">'+escapeHtml(nw[ni+k]||'')+'</span>';ni+=l;found=true;break}}
+      if(!found){r+='<span class="diff-del">'+escapeHtml(ow[oi]||'')+'</span>';oi++;if(ni<nw.length&&ow[oi]!==nw[ni]){r+='<span class="diff-add">'+escapeHtml(nw[ni]||'')+'</span>';ni++}}
+    }
+  }
+  return r||'（无变化）';
+}
+
+// ============================================================
+// 9. 朗读
+// ============================================================
+function toggleTheme(){document.body.classList.toggle('dark');}
+function flashFirstBook(){
+  const cards=document.querySelectorAll('.book-card');
+  if(cards.length>0){
+    cards[0].scrollIntoView({behavior:'smooth'});
+    cards[0].style.boxShadow='0 0 0 5px var(--a)';
+    setTimeout(()=>cards[0].style.boxShadow='',800);
+  }
+}
+
+// 删除书籍
+async function deleteBook(){
+  if(!curBook||!curBook.isUploaded){alert('无法删除预置书籍');return;}
+  if(!confirm('确定要删除《'+curBook.title+'》吗？此操作不可恢复。'))return;
+  if(db){try{
+    await db.from('translations').delete().eq('book_id',curBook.id);
+    await db.from('comments').delete().eq('book_id',curBook.id);
+    await db.from('books').delete().eq('id',curBook.id);
+  }catch(e){alert('数据库删除失败：'+e.message);return;}}
+  delete PRELOAD[curBook.id];
+  goLib();alert('✅ 已删除');
+}
+
+// 浏览器返回键拦截
+window.addEventListener('popstate',function(e){
+  if(e.state&&e.state.view==='reader'){
+    // 用户按返回键 -> 回到资料库
+    goLib();
+  }else if(e.state&&e.state.view==='library'){
+    // 已经在资料库，不做处理
+  }
+});
+
+// ============================================================
+// 10. 工具
+// ============================================================
+function escapeHtml(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
+
+// ============================================================
+// 11. 启动
+// ============================================================
+document.addEventListener('DOMContentLoaded',async()=>{
+  document.documentElement.style.setProperty('--fs','17px');
+  // 首页引导卡片事件绑定
+  if(db){
+    try{const{data}=await db.auth.getSession();if(data.session){session=data.session;await loadProfile();}}catch(e){console.warn('Session restore failed');}
+  }
+  renderNav();await renderLib();
+  // 处理URL中的#book=参数（支持直接链接到某本书）
+  const hash=location.hash;if(hash.startsWith('#book=')){const id=hash.replace('#book=','');setTimeout(()=>openB(id),500);}
+  // 翻译粘贴框实时监听
+  var tp=document.getElementById('transUpPaste');if(tp){tp.addEventListener('input',function(){transUpText=this.value;if(transUpText.trim().length>50)transUpParas=smartSplit(transUpText);showTransMatch();});}
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeEd();closeVr();closeAuth();closeProf();closeUp();var t=document.getElementById('transUpM');if(t)t.classList.remove('on');document.getElementById('tocPanel').style.display='none';}});
+  // 点击空白区域关闭所有弹窗/面板
+  document.addEventListener('click',function(e){
+    const t=e.target;
+    // 如果点击的是弹窗内部或触发按钮，不关闭
+    if(t.closest('.box')||t.closest('button')||t.closest('input')||t.closest('textarea')||t.closest('select')||t.closest('#tocPanel')||t.closest('.para')||t.closest('.book-card'))return;
+    // 关闭所有弹窗
+    ['authModal','edM','vrM','profM','upM'].forEach(id=>document.getElementById(id).classList.remove('on'));
+    // 关闭目录
+    document.getElementById('tocPanel').style.display='none';
+    // 关闭词汇面板（如果存在）
+    const vp=document.getElementById('vocabPanel');if(vp)vp.classList.remove('open');
+  });
+});
+window.onerror=function(msg,url,line){console.error('[Error '+new Date().toLocaleTimeString()+'] '+msg+' line '+line);return false;};
+</script>
+</body>
+</html>
