@@ -572,28 +572,30 @@ async function doAuth(){
   if(pass.length<6){alert('密码至少6位');return;}
   let r;
   if(authMode==='login'){
-    r=await db.auth.signInWithPassword({email,password:pass});
-    if(r.error){alert('登录失败：'+r.error.message);return;}
-    session=r.data.session;
-    closeAuth();await loadProfile();renderNav();renderLib();
+    try{
+      r=await db.auth.signInWithPassword({email,password:pass});
+      if(r.error){alert('登录失败：'+r.error.message);return;}
+      session=r.data.session;
+      closeAuth();await loadProfile();renderNav();renderLib();
+    }catch(e){alert('登录异常：'+e.message);}
   }else{
     if(!name){alert('请填写用户名');return;}
-    r=await db.auth.signUp({email,password:pass,options:{data:{username:name}}});
-    if(r.error){
-      if(r.error.message.includes('rate limit')||r.error.message.includes('exceeded')){
-        alert('注册频率过高，请稍后重试。\n\n或使用演示账号：alice@demo.com / bob@demo.com\n密码：demo1234');
-      }else{alert('注册失败：'+r.error.message);}
-      return;
-    }
-    // 注册成功后手动插入profile
-    if(r.data.user) await db.from('profiles').insert({id:r.data.user.id,username:name});
-    // 尝试自动登录
-    if(r.data.session){
-      session=r.data.session;closeAuth();await loadProfile();renderNav();renderLib();
-      alert('✅ 注册成功！欢迎 '+name+'！\n你现在可以改进翻译、发评论了。');
-    }else{
-      closeAuth();alert('✅ 注册成功！请用刚才的邮箱和密码登录。');
-    }
+    try{
+      r=await db.auth.signUp({email,password:pass,options:{data:{username:name}}});
+      if(r.error){
+        if(r.error.message.includes('rate limit')||r.error.message.includes('exceeded')){alert('注册频率过高，请稍后重试。');}
+        else{alert('注册失败：'+r.error.message);}
+        return;
+      }
+      // 插入profile（RLS可能阻止，用try-catch保护）
+      if(r.data.user){try{await db.from('profiles').insert({id:r.data.user.id,username:name});}catch(e){console.warn('Profile insert failed:',e);}}
+      if(r.data.session){
+        session=r.data.session;closeAuth();await loadProfile();renderNav();renderLib();
+        alert('注册成功！欢迎 '+name+'！');
+      }else{
+        closeAuth();alert('注册成功！现在请切换到登录界面，用刚才的邮箱和密码登录。');
+      }
+    }catch(e){alert('注册异常：'+e.message);}
   }
 }
 async function doLogout(){if(db)await db.auth.signOut();session=null;profile=null;renderNav();renderLib();}
