@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>语桥 ReadBridge — 协作双语阅读平台</title>
-<!-- Supabase SDK：主CDN + 国内备用 -->
+<!-- Supabase SDK -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script>
   if(typeof supabase==='undefined'){
@@ -320,10 +320,10 @@ button{font-family:inherit;cursor:pointer}
 const SUPABASE_URL = 'https://hgdmyrkdxcnduxhbezfd.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_bXidjI4JfQ3r224M2cRcLw_1gNSpo0C';
 
-// ========== 下载原文 ==========
+// ========== 下载原文（输出标准化版本）==========
 function downloadBook(){
   if(!curBook||!curBook.zh)return;
-  const text=curBook.zh.join('\n\n');
+  const text=normalizeText(curBook.zh.join('\n\n'));
   const blob=new Blob([text],{type:'text/plain;charset=utf-8'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);
   a.download=(curBook.title||'download')+'.txt';a.click();
@@ -667,22 +667,101 @@ async function translatePara(i){
   }catch(e){alert('翻译失败：'+e.message);if(btn){btn.disabled=false;btn.textContent='🌐 翻译此段';}}
 }
 
-// 智能分段：自动检测换行格式
+// ========== TXT 标准化引擎 ==========
+function normalizeText(text){
+  // 1. 统一换行符
+  text=text.replace(/\r\n/g,'\n').replace(/\r/g,'\n');
+  // 2. 清理常见噪音
+  text=text.replace(/第[【\[\(（]\s*\d+\s*[】\]\)）][段节]/g,'');          // 第【1】段
+  text=text.replace(/^[\(（]\d+[\)）]\s*/gm,'');                        // (1) 序号
+  text=text.replace(/^\d{1,4}\s*$/gm,'');                               // 纯页码行
+  text=text.replace(/^[\/\*\-—]{3,}\s*$/gm,'');                         // 分隔线
+  // 3. 检测段落分隔方式，统一为双换行
+  const fullSpaceCount=(text.match(/　　/g)||[]).length;
+  const mixedSpaceCount=(text.match(/[　 　]{2,}/g)||[]).length;
+  if(fullSpaceCount>5||mixedSpaceCount>10){
+    // 空格缩进分段 → 转为双换行
+    text=text.replace(/[　 　]{2,}/g,'\n\n');
+  }
+  // 4. 单换行变双换行（保守：仅在无明显双换行时）
+  const doubleNewlines=(text.match(/\n\n/g)||[]).length;
+  if(doubleNewlines<5&&text.length>5000){
+    text=text.replace(/\n(?!\n)/g,'\n\n');
+  }
+  // 5. 压缩多余空行：3+ → 2
+  text=text.replace(/\n{3,}/g,'\n\n');
+  // 6. 每行去首尾空白
+  text=text.split('\n').map(l=>l.trim()).join('\n');
+  // 7. 去首尾空行
+  text=text.replace(/^\n+/,'').replace(/\n+$/,'');
+  return text;
+}
+
+// 智能分段：在标准化后的文本上工作
 function smartSplit(text){
-  let paras=text.split(/\n\s*\n/).filter(p=>p.trim());
-  if(paras.length<=2&&text.length>5000){
+  // 先标准化
+  text=normalizeText(text);
+  // 清理格式标记和页码
+  text=text.replace(/第[【\[]\d+[】\]][段节]/g,'').replace(/^[\(（]\d+[\)）]\s*/gm,'');
+  text=text.replace(/^\d{1,4}\s*$/gm,'');
+  // 统一换行符
+  text=text.replace(/\r\n/g,'\n').replace(/\r/g,'\n');
+
+  let paras=[];
+
+  // 策略1：双换行分段
+  paras=text.split(/\n\s*\n/).filter(p=>p.trim());
+
+  // 策略2：中文段落缩进分段（两个以上连续空格/全角空格 = 新段落）
+  if(paras.length<10&&text.length>2000){
+    // 匹配 2+个空格或全角空格的组合（中国出版格式：段首缩进）
+    const indentCount=(text.match(/[　 　]{2,}/g)||[]).length;
+    if(indentCount>3){
+      paras=text.split(/[　 　]{2,}/).filter(p=>p.trim());
+      // 清理行内残留空格
+      paras=paras.map(p=>p.replace(/[　 　]+/g,'').trim()).filter(p=>p.length>0);
+      // 第一段拆题记+章节标题（如果有换行）
+      if(paras.length>0&&paras[0].includes('\n')){
+        const frontParts=paras[0].split(/\n+/).filter(p=>p.trim());
+        if(frontParts.length>1){paras.shift();paras=frontParts.concat(paras);}
+      }
+    }
+  }
+
+  // 策略3：单换行分段（每一行可能是独立段落）
+  if(paras.length<10&&text.length>2000){
     const lines=text.split(/\n/).filter(l=>l.trim());
     const merged=[];let buf='';
-    for(const line of lines){const t=line.trim();if(!t)continue;if(t.length<20&&buf){buf+='\n'+t;}else{if(buf)merged.push(buf.trim());buf=t;}}
-    if(buf.trim())merged.push(buf.trim());if(merged.length>paras.length)paras=merged;
+    for(const l of lines){
+      if(l.length<20&&buf){buf+='\n'+l;}
+      else{if(buf.trim())merged.push(buf.trim());buf=l;}
+    }
+    if(buf.trim())merged.push(buf.trim());
+    if(merged.length>paras.length)paras=merged;
   }
-  if(paras.length<=2&&text.length>2000){
-    paras=text.split(/(?<=[。！？\.\!\?])/).filter(p=>p.trim());
+
+  // 策略4：句号强制分段（兜底）
+  if(paras.length<5&&text.length>2000){
+    const clean=text.replace(/\n/g,'').replace(/　/g,'');
+    const sentences=clean.split(/(?<=[。！？\.\!\?])/);
     const merged=[];let buf='';
-    for(const s of paras){if(buf.length+s.length>800){merged.push(buf.trim());buf=s;}else{buf+=s;}}
-    if(buf.trim())merged.push(buf.trim());if(merged.length>1)paras=merged;
+    for(const s of sentences){
+      if(buf.length+s.length>800){merged.push(buf.trim());buf=s;}
+      else{buf+=s;}
+    }
+    if(buf.trim())merged.push(buf.trim());
+    if(merged.length>paras.length)paras=merged;
   }
-  return paras.filter(p=>p.length>0);
+
+  // 最后一步：段落内部如存在2格以上连续空格 → 强制在此处分段
+  const final=[];
+  for(const p of paras){
+    if(p.length>200&&/[　 　]{2,}/.test(p)){
+      const subParts=p.split(/[　 　]{2,}/).filter(s=>s.trim());
+      final.push(...subParts.map(s=>s.replace(/[　 　]+/g,'').trim()).filter(s=>s.length>0));
+    }else{final.push(p);}
+  }
+  return final.filter(p=>p.length>0);
 }
 
 // ========== 上传新书 ==========
@@ -714,7 +793,7 @@ async function doUp(btn){
     const paras=smartSplit(text);
     if(paras.length===0){alert('未能识别段落');uploading=false;if(btn){btn.disabled=false;btn.textContent='📤 上传';}return;}
 
-    localStorage.setItem('rb_raw_'+bookId,text);
+    // 不再存localStorage（避免quota超限），Supabase是可靠数据源
     if(db){
       if(btn)btn.textContent='⏳ 存入云端...';
       await db.from('books').insert({id:bookId,title,author,genre,cover:'📖',description:text.substring(0,5000),word_count:text.length,uploader_id:session.user.id});
@@ -750,10 +829,9 @@ async function renderLib(){
   if(db){try{
     const{data}=await db.from('books').select('*');
     if(data) data.forEach(b=>{if(!PRELOAD[b.id]) books.push({id:b.id,title:b.title,author:b.author,genre:b.genre,cover:b.cover||'📖',desc:b.description||'',wordCount:b.word_count||0,isUploaded:true,uploaderId:b.uploader_id});});
-    document.getElementById('dbStatus').textContent='✅ 已连接';
-    document.getElementById('dbStatus').style.color='var(--grammar-prep)';
-  }catch(e){console.warn('Load books failed');document.getElementById('dbStatus').textContent='⚠ 离线';document.getElementById('dbStatus').style.color='#f59e0b';}}
-  else{document.getElementById('dbStatus').textContent='⚠ 离线';document.getElementById('dbStatus').style.color='#f59e0b';}
+    var ds=document.getElementById('dbStatus');if(ds){ds.textContent='✅ 已连接';ds.style.color='var(--grammar-prep)';}
+  }catch(e){console.warn('Load books failed');var ds=document.getElementById('dbStatus');if(ds){ds.textContent='⚠ 离线';ds.style.color='#f59e0b';}}}
+  else{var ds=document.getElementById('dbStatus');if(ds){ds.textContent='⚠ 离线';ds.style.color='#f59e0b';}}
   if(filterTag!=='all') books=books.filter(b=>b.genre===filterTag);
   document.getElementById('bookGrid').innerHTML=books.map(b=>{
     return'<div class="book-card" onclick="openB(\''+b.id+'\')">'
@@ -801,7 +879,7 @@ async function openB(id){
         }
       }
     }catch(e){console.warn('Supabase加载失败:',e.message);}}
-    if(!book){const raw=localStorage.getItem('rb_raw_'+id);if(raw){const zh=smartSplit(raw);if(zh.length>0){book={zh,en:zh.map(()=>''),isUploaded:true};PRELOAD[id]=book;}}}
+    if(!book){const raw=localStorage.getItem('rb_raw_'+id);if(raw){try{const zh=smartSplit(raw);if(zh.length>0){book={zh,en:zh.map(()=>''),isUploaded:true};PRELOAD[id]=book;}}catch(e){localStorage.removeItem('rb_raw_'+id);}}}
   }
   if(!book){alert('书籍未找到。');return;}
   if(!book.zh||book.zh.length===0){alert('书籍内容为空。');return;}
@@ -821,18 +899,19 @@ async function openB(id){
   subscribeRealtime();
 
   renderL();renderR();updateWC();syncScroll();
-  // 显示删除按钮（上传的书 + 已登录即可删除，不严格校验uploaderId）
+  setTimeout(loadVoteCounts,500);
+  // 按钮显隐
   const delBtn=document.getElementById('delBookBtn');
   const dlBtn=document.getElementById('dlBookBtn');
   const utBtn=document.getElementById('upTransBtn');
-  if(curBook.isUploaded&&session){
+  if(curBook.isUploaded){
     delBtn.style.display='inline-flex';
     dlBtn.style.display='inline-flex';
-    utBtn.style.display='inline-flex';
+    utBtn.style.display=session?'inline-flex':'none';
   }else{
     delBtn.style.display='none';
-    dlBtn.style.display=curBook.isUploaded?'inline-flex':'none';
-    utBtn.style.display=curBook.isUploaded&&session?'inline-flex':'none';
+    dlBtn.style.display='none';
+    utBtn.style.display='none';
   }
   // 浏览器返回键支持
   history.pushState({view:'reader',bookId:id},'', '#book='+id);
@@ -847,43 +926,143 @@ function buildTOC(){
   gChapters=[];
 
   // 找出所有候选章节（先收集再过滤）
-  const SKIP=/^(注释|注解|注|译者序|作者序|前言|序言|后记|跋|附录|参考文献|出版信息|版权|ISBN|定价|印次|版次|印刷|书号|策划|责编|编辑|设计|排版|出品|荣誉|推荐语|目录|楔子|引子|尾声|番外)/;
+  const SKIP=/^(注释|注解|注|译者序|作者序|前言|序言|后记|跋|附录|参考文献|出版信息|版权|ISBN|定价|印次|版次|印刷|书号|策划|责编|编辑|设计|排版|出品|荣誉|推荐语|楔子|引子|尾声|番外)/;
+  const SPECIAL=/^(引言|题记|楔子|尾声|番外|序章|终章|跋|代序)/;
   const candidates=[];
+  // 题记/引言等特殊标题检测：位于第一章之前 + 第一行含关键词 + 首行≤15字
+  let firstRealChap=-1;
+  for(let i=0;i<Math.min(50,zh.length);i++){
+    if(/第[一二三四五六七八九十百千\d]+[章节回]/.test(zh[i])||/chapter\s*\d+/i.test(zh[i])){firstRealChap=i;break;}
+  }
+  const searchEnd=firstRealChap>0?firstRealChap:Math.min(20,zh.length);
+  for(let i=0;i<searchEnd;i++){
+    const p=zh[i];if(!p)continue;
+    const firstLine=p.split('\n')[0].trim(); // 只检查第一行
+    if(firstLine.length>15)continue;
+    if(firstLine.includes('题记')||firstLine.includes('引言')||firstLine.includes('楔子')||firstLine.includes('序章')||firstLine.includes('前言')||firstLine.includes('代序')||firstLine.includes('跋')){
+      candidates.push({title:firstLine,index:i});break;
+    }
+  }
   zh.forEach((p,i)=>{
     let title='';
+    // 规则1：第X章/节/回
     const m1=p.match(/第[一二三四五六七八九十百千\d]+[章节回]/);
     if(m1){
       const rest=p.substring(m1.index+m1[0].length).trim().replace(/^[　\s]+/,'');
       if(!SKIP.test(rest)&&rest.length<80)title=m1[0]+(rest?' '+rest.substring(0,18):'');
       else if(!rest||rest.length<3)title=m1[0];
     }
+    // 规则2：英文Chapter
     if(!title){const m2=p.match(/Chapter\s*\d+|CHAPTER\s*[IVX]+/i);if(m2)title=p.substring(m2.index,Math.min(m2.index+30,p.length)).trim();}
-    if(!title&&p.length<20&&/^\d+$/.test(p))title='第'+p+'章';
+    // 规则3：纯中文数字作章节（边城类）— "一"、"二" 且单独成段
+    if(!title&&p.length<10&&/^[一二三四五六七八九十百千]{1,3}$/.test(p.trim()))title='第'+p.trim()+'章';
+    // 规则4：纯数字章节
+    if(!title&&p.length<20&&/^\d+$/.test(p)&&i>0)title='第'+p+'章';
+    // 规则5：数字+标点
     if(!title){const m4=p.match(/^(\d{1,3})[\.\、\)）]\s*\S/);if(m4&&p.length<100)title=m4[0];}
+    // 规则6：短段标题(仅预置书)
     if(!title&&!curBook.isUploaded&&p.length<40&&p.length>3&&!/[，。！？,\.!\?：:；;]/.test(p)&&!SKIP.test(p))title=p.trim();
     if(title)candidates.push({title,index:i});
   });
 
-  // 核心算法：用段落间距区分假目录(无正文,间隙<3段)和真章节(有正文,间隙≥3段)
-  // 从后往前找：第一个间隙大的候选就是真章节开始的位置
-  let realStart=0;
+  // 给每个候选标注类型（用于双重编号检测）
+  candidates.forEach(c=>{
+    const orig=zh[c.index]||'';
+    if(/第[一二三四五六七八九十百千\d]+[章节回]/.test(orig))c._type='cn';
+    else if(/^[一二三四五六七八九十百千]{1,3}$/.test(orig.trim()))c._type='num';
+  });
+
+  // 区分假目录 vs 真章节：按间隙聚类
+  // 找出所有"大间隙"（≥5段）的位置
+  let firstLargeGap=-1;
   for(let i=1;i<candidates.length;i++){
-    const gap=candidates[i].index-candidates[i-1].index;
-    if(gap>=5){realStart=i;break;} // 间隙≥5段 → 从这里开始是真章节
+    if(candidates[i].index-candidates[i-1].index>=5){firstLargeGap=i;break;}
   }
-  // 如果找不到明显间隙但候选很多(>50)，说明整本书都是假目录结构
+  // 如果第一个大间隙之前只有≤3个候选 → 那些是真的前言/题记/第一章，保留
+  // 如果第一个大间隙之前有>5个候选且都间隙<5 → 那是TOC集群，丢弃
+  let realStart=0;
+  if(firstLargeGap>0){
+    if(firstLargeGap<=3) realStart=0; // 前言+前几章，保留全部
+    else realStart=firstLargeGap; // TOC集群在前面，跳过
+  }
+  // 如果没有大间隙但候选过多 → 降级：只保留"第X章"格式
   if(realStart===0&&candidates.length>50){
-    // 找最大间隙的位置
     let maxGap=0,maxIdx=0;
-    for(let i=1;i<candidates.length;i++){
-      const gap=candidates[i].index-candidates[i-1].index;
-      if(gap>maxGap){maxGap=gap;maxIdx=i;}
-    }
-    if(maxGap>=3)realStart=maxIdx;
+    for(let i=1;i<candidates.length;i++){const gap=candidates[i].index-candidates[i-1].index;if(gap>maxGap){maxGap=gap;maxIdx=i;}}
+    if(maxGap>=3&&maxIdx>10)realStart=maxIdx;
   }
 
   // 只保留真章节
   gChapters=candidates.slice(realStart);
+
+  // 特殊章节豁免：题记/引言/番外等如通过正文长度验证 → 始终保留
+  const specialChapters=candidates.filter(c=>{
+    if(!SPECIAL.test(c.title))return false;
+    const ci=candidates.indexOf(c);
+    const nextIdx=(ci+1<candidates.length)?candidates[ci+1].index:zh.length;
+    let len=0;
+    // 同一段落内标题之后的文字
+    const firstPara=zh[c.index]||'';
+    const titlePos=firstPara.indexOf(c.title);
+    if(titlePos>=0)len+=firstPara.substring(titlePos+c.title.length).length;
+    for(let j=c.index+1;j<nextIdx;j++){if(zh[j])len+=zh[j].length;}
+    return len>=150;
+  });
+  // 将符合条件的特殊章节插入到gChapters最前面（如果不在里面）
+  const existingTitles=new Set(gChapters.map(c=>c.title));
+  for(const sc of specialChapters){
+    if(!existingTitles.has(sc.title))gChapters.unshift(sc);
+  }
+
+  // 双重章节名优先级
+  const chapA=gChapters.filter(c=>c._type==='cn');
+  const chapB=gChapters.filter(c=>c._type==='num');
+  if(chapA.length>=2&&chapB.length>=2){
+    if(chapB[0].index>chapA[0].index) gChapters=gChapters.filter(c=>c._type!=='cn');
+    else if(chapA[0].index>chapB[0].index) gChapters=gChapters.filter(c=>c._type!=='num');
+  }
+
+  // === 三重新验证 ===
+
+  // 验证1：格式一致性 — 如果95%的章节用同一格式，过滤掉格式不同的（豁免特殊章）
+  if(gChapters.length>=3){
+    const cnCount=gChapters.filter(c=>/第[一二三四五六七八九十百千\d]+[章节回]/.test(c.title)).length;
+    const enCount=gChapters.filter(c=>/chapter/i.test(c.title)).length;
+    const total=gChapters.length;
+    if(cnCount>total*0.9) gChapters=gChapters.filter(c=>SPECIAL.test(c.title)||/第[一二三四五六七八九十百千\d]+[章节回]/.test(c.title));
+    else if(enCount>total*0.9) gChapters=gChapters.filter(c=>SPECIAL.test(c.title)||/chapter/i.test(c.title));
+  }
+
+  // 验证2：正文长度 — 真章节≥50字；特殊章≥150字
+  gChapters=gChapters.filter((c,i)=>{
+    const nextIdx=(i+1<gChapters.length)?gChapters[i+1].index:zh.length;
+    let bodyLen=0;
+    // 同一段落内标题之后的文字也计入（适用于"题记"标题+正文在同一段的情况）
+    const firstPara=zh[c.index]||'';
+    const titlePos=firstPara.indexOf(c.title);
+    if(titlePos>=0)bodyLen+=firstPara.substring(titlePos+c.title.length).length;
+    // 后续段落全部计入
+    for(let j=c.index+1;j<nextIdx;j++){if(zh[j])bodyLen+=zh[j].length;}
+    if(SPECIAL.test(c.title))return bodyLen>=150;
+    return bodyLen>=50;
+  });
+
+  // 验证3：注释过滤 — 两个候选间距<2段且第二个更长 → 第一个是注释
+  gChapters=gChapters.filter((c,i)=>{
+    if(i===0)return true;
+    const prev=gChapters[i-1];
+    if(c.index-prev.index<=2&&c.title.length>prev.title.length)return false;
+    return true;
+  });
+
+  // 验证4：数字格式一致性 — "第1章"(阿拉伯) vs "第一章"(中文数字)，只保留多数派
+  if(gChapters.length>=3){
+    const arabic=gChapters.filter(c=>/第\d+[章节回]/.test(c.title)); // "第1章"
+    const chinese=gChapters.filter(c=>/第[一二三四五六七八九十百千]+[章节回]/.test(c.title)); // "第一章"
+    if(arabic.length>chinese.length*2) gChapters=gChapters.filter(c=>!/第[一二三四五六七八九十百千]+[章节回]/.test(c.title));
+    else if(chinese.length>arabic.length*2) gChapters=gChapters.filter(c=>!/第\d+[章节回]/.test(c.title));
+  }
+
   // 去重：标题相同的相邻项只保留一个
   gChapters=gChapters.filter((c,i)=>i===0||c.title!==gChapters[i-1].title);
   if(gChapters.length>200) gChapters=gChapters.slice(0,200);
@@ -1028,9 +1207,10 @@ function renderR(){
       +collabTag
       +'</span>'
       +transContent
-      +'<div style="display:flex;gap:6px;margin-top:6px">'
-      +(session?'<button class="btn sm" onclick="openEd('+i+')">✏️ 改写</button>':'')
-      +'<button class="btn sm" onclick="openComment('+i+')">💬 评论'+(comments.length>0?' ('+comments.length+')':'')+'</button>'
+      +'<div style="display:flex;gap:6px;margin-top:6px;align-items:center">'
+      +(has&&v.content&&session?'<button class="btn sm" onclick="voteTranslation('+i+',1,this)" style="padding:3px 8px">👍 <span id="up'+i+'">-</span></button><button class="btn sm" onclick="voteTranslation('+i+',-1,this)" style="padding:3px 8px">👎 <span id="down'+i+'">-</span></button>':'')
+      +(session?'<button class="btn sm" onclick="openEd('+i+')">✏️</button>':'')
+      +'<button class="btn sm" onclick="openComment('+i+')">💬'+(comments.length>0?' '+comments.length:'')+'</button>'
       +'</div>'
       +(comments.length>0?'<div class="comments-section" style="margin-top:6px">'+comments.map(c=>'<div class="comment-item"><span class="c-author">'+escapeHtml(c.author_name)+'</span><span class="c-text">'+escapeHtml(c.content)+'</span></div>').join('')+'</div>':'')
       +'<div class="comment-input-row" id="commentRow'+i+'" style="display:none;margin-top:4px"><input id="commentInput'+i+'" placeholder="写评论..."><button onclick="doComment('+i+')">发送</button></div>'
@@ -1118,6 +1298,27 @@ function openComment(i){
   row.style.display=row.style.display==='none'?'flex':'none';
   if(row.style.display!=='none') document.getElementById('commentInput'+i).focus();
 }
+async function voteTranslation(i,val,btn){
+  if(!session){alert('请先登录');return;}
+  const v=getActive(i,curLang);if(!v||!v.id){return;}
+  const{data:existing}=await db.from('translation_votes').select('*').eq('translation_id',v.id).eq('voter_id',session.user.id).single();
+  if(existing&&existing.vote===val){await db.from('translation_votes').delete().eq('id',existing.id);}
+  else{await db.from('translation_votes').upsert({translation_id:v.id,voter_id:session.user.id,vote:val},{onConflict:'translation_id,voter_id'});}
+  loadVoteCounts();
+}
+async function loadVoteCounts(){
+  if(!curBook||!db)return;
+  const rng=chapterRange();
+  for(let i=rng.start;i<rng.end;i++){
+    const v=getActive(i,curLang);if(!v||!v.id)continue;
+    const{data}=await db.from('translation_votes').select('vote').eq('translation_id',v.id);
+    if(!data)continue;
+    const up=data.filter(x=>x.vote===1).length,down=data.filter(x=>x.vote===-1).length;
+    const ue=document.getElementById('up'+i),de=document.getElementById('down'+i);
+    if(ue)ue.textContent=up||'-';if(de)de.textContent=down||'-';
+  }
+}
+
 async function doComment(i){
   if(!requireDB())return;
   const input=document.getElementById('commentInput'+i);
@@ -1195,6 +1396,8 @@ function flashFirstBook(){
 // 删除书籍
 async function deleteBook(){
   if(!curBook||!curBook.isUploaded){alert('无法删除预置书籍');return;}
+  if(!session){alert('请先登录');return;}
+  if(curBook.uploaderId&&session.user.id!==curBook.uploaderId){alert('无权限：只有上传者可以删除此书');return;}
   if(!confirm('确定要删除《'+curBook.title+'》吗？此操作不可恢复。'))return;
   if(db){try{
     await db.from('translations').delete().eq('book_id',curBook.id);
@@ -1225,9 +1428,13 @@ function escapeHtml(s){const d=document.createElement('div');d.textContent=s;ret
 // ============================================================
 document.addEventListener('DOMContentLoaded',async()=>{
   document.documentElement.style.setProperty('--fs','17px');
-  // 首页引导卡片事件绑定
+  // 清理旧localStorage缓存
+  try{const keys=Object.keys(localStorage);for(const k of keys){if(k.startsWith('rb_raw_'))localStorage.removeItem(k);}}catch(e){}
+  // 5秒超时：如果Supabase还未连接，标记离线
+  setTimeout(()=>{const s=document.getElementById('dbStatus');if(s&&s.textContent.includes('连接中')){s.textContent='⚠ 离线';s.style.color='#f59e0b';}},5000);
+  // 尝试恢复session（不阻塞页面加载）
   if(db){
-    try{const{data}=await db.auth.getSession();if(data.session){session=data.session;await loadProfile();}}catch(e){console.warn('Session restore failed');}
+    try{const{data}=await db.auth.getSession();if(data.session){session=data.session;await loadProfile();}}catch(e){}
   }
   renderNav();await renderLib();
   // 处理URL中的#book=参数（支持直接链接到某本书）
