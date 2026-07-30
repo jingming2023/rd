@@ -1,10 +1,12 @@
 /**
  * 语桥 ReadBridge — Edge Function: 评论提交
+ * 
+ * JWT验证 → Profile自动创建 → 速率限制 → 内容校验 → 写入数据库
  */
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const RATE_LIMIT_MAX = 30;  // 每分钟30条评论
+const RATE_LIMIT_MAX = 30;
 const COMMENT_MAX = 1000;
 
 serve(async (req: Request) => {
@@ -23,19 +25,35 @@ serve(async (req: Request) => {
   }
 
   try {
-    // 验证 JWT
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) return json(401, { error: "未登录" });
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
     const { data: { user } } = await supabase.auth.getUser(
       authHeader.replace("Bearer ", "")
     );
     if (!user) return json(401, { error: "登录已过期" });
+
+    const username = user.user_metadata?.username || user.email?.split("@")[0] || "匿名";
+
+    // 确保 profile 存在（使用 maybeSingle 避免空结果抛异常）
+    const { data: existingProfile, error: profileError } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (!existingProfile && !profileError) {
+      await supabase.from("profiles").insert({
+        id: user.id,
+        username: username,
+        contributions: 0,
+      });
+    }
 
     // 速率限制
     const windowStart = new Date(Date.now() - 60000).toISOString();
@@ -61,7 +79,6 @@ serve(async (req: Request) => {
     }
 
     // 写入
-    const username = user.user_metadata?.username || user.email?.split("@")[0] || "匿名";
     const { error } = await supabase.from("comments").insert({
       book_id,
       paragraph_index,
@@ -70,12 +87,15 @@ serve(async (req: Request) => {
       content: trimmed,
     });
 
-    if (error) return json(500, { error: "保存失败" });
+    if (error) {
+      console.error("Insert failed:", error);
+      return json(500, { error: "保存失败: " + error.message });
+    }
     return json(200, { success: true });
 
   } catch (e) {
     console.error(e);
-    return json(500, { error: "服务器错误" });
+    return json(500, { error: "服务器错误: " + (e instanceof Error ? e.message : String(e)) });
   }
 });
 

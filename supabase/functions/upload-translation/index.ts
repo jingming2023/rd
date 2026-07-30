@@ -36,7 +36,7 @@ serve(async (req: Request) => {
     const token = authHeader.replace("Bearer ", "");
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
@@ -44,15 +44,15 @@ serve(async (req: Request) => {
       return jsonResponse(401, { error: "登录已过期，请重新登录" });
     }
 
-    // === 确保 profile 存在（修复外键约束） ===
+    // === 确保 profile 存在（使用 maybeSingle 避免空结果抛异常） ===
     const username = user.user_metadata?.username || user.email?.split("@")[0] || "匿名";
-    const { data: existingProfile } = await supabase
+    const { data: existingProfile, error: profileError } = await supabase
       .from("profiles")
       .select("id")
       .eq("id", user.id)
-      .single();
+      .maybeSingle();
     
-    if (!existingProfile) {
+    if (!existingProfile && !profileError) {
       await supabase.from("profiles").insert({
         id: user.id,
         username: username,
