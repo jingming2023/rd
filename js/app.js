@@ -113,13 +113,82 @@ async function doTransUp(){
 }
 
 
+// ============================================================
+// 1. 数据库连接与降级管理
+// ============================================================
 let db = null;
+let dbOnline = false;  // 数据库是否实际可用（区别于客户端对象是否创建）
+
 try {
   if(typeof supabase!=='undefined'){
     db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
   }
 } catch(e){ console.error('Supabase init failed'); }
-function requireDB(){ if(!db){ alert('后端服务暂未连接，请刷新页面后重试。\n\n如多次失败，请检查网络连接。'); return false; } return true; }
+
+// 检测数据库是否真正在线
+async function checkDBOnline(){
+  if(!db) return false;
+  try{
+    const start = Date.now();
+    const{data,error} = await db.from('books').select('id').limit(1).abortSignal(AbortSignal.timeout(5000));
+    if(error) throw error;
+    dbOnline = true;
+    updateDBStatus('online');
+    return true;
+  }catch(e){
+    dbOnline = false;
+    updateDBStatus('offline');
+    return false;
+  }
+}
+
+function updateDBStatus(state){
+  const el = document.getElementById('dbStatus');
+  if(!el) return;
+  if(state==='online'){
+    el.textContent = '✅ 已连接';
+    el.style.color = 'var(--grammar-prep)';
+  }else if(state==='offline'){
+    el.textContent = '⚠ 离线（仅可阅读预置书）';
+    el.style.color = '#f59e0b';
+  }else{
+    el.textContent = '⏳ 连接中';
+    el.style.color = 'var(--s)';
+  }
+}
+
+// 资料库离线提示横幅
+function showOfflineBanner(){
+  const lib = document.getElementById('libPage');
+  if(!lib) return;
+  // 移除旧横幅
+  const old = document.getElementById('offlineBanner');
+  if(old) old.remove();
+  
+  const banner = document.createElement('div');
+  banner.id = 'offlineBanner';
+  banner.style.cssText = 'background:#fef3c7;border:1px solid #f59e0b;border-radius:10px;padding:10px 16px;margin-bottom:14px;text-align:center;font-size:0.85em;color:#92400e;display:flex;align-items:center;justify-content:center;gap:8px';
+  banner.innerHTML = '⚠️ 数据库离线 — 仅可阅读预置书籍。上传、翻译改进、评论等功能暂不可用。';
+  const firstChild = lib.children[0];
+  if(firstChild) lib.insertBefore(banner, firstChild);
+}
+
+function hideOfflineBanner(){
+  const banner = document.getElementById('offlineBanner');
+  if(banner) banner.remove();
+}
+
+function requireDB(){ 
+  if(!db){ 
+    alert('后端服务暂未连接，请刷新页面后重试。\n\n如多次失败，请检查网络连接。'); 
+    return false; 
+  }
+  if(!dbOnline){
+    alert('数据库当前离线。预置书籍可以正常阅读，但此功能需要联网。\n\n请稍后重试。');
+    return false;
+  }
+  return true; 
+}
 
 let session = null;
 let profile = null;
@@ -563,13 +632,24 @@ async function doUp(btn){
 let filterTag='all';
 async function renderLib(){
   let books=Object.entries(PRELOAD).map(([id,b])=>({id,...b}));
-  // 从Supabase加载用户上传的书籍（每次打开资料库都重新拉取）
-  if(db){try{
-    const{data}=await db.from('books').select('*');
-    if(data) data.forEach(b=>{if(!PRELOAD[b.id]) books.push({id:b.id,title:b.title,author:b.author,genre:b.genre,cover:b.cover||'📖',desc:b.description||'',wordCount:b.word_count||0,isUploaded:true,uploaderId:b.uploader_id});});
-    var ds=document.getElementById('dbStatus');if(ds){ds.textContent='✅ 已连接';ds.style.color='var(--grammar-prep)';}
-  }catch(e){console.warn('Load books failed');var ds=document.getElementById('dbStatus');if(ds){ds.textContent='⚠ 离线';ds.style.color='#f59e0b';}}}
-  else{var ds=document.getElementById('dbStatus');if(ds){ds.textContent='⚠ 离线';ds.style.color='#f59e0b';}}
+  
+  // 检测数据库在线状态
+  if(db){
+    const online = await checkDBOnline();
+    if(online){
+      hideOfflineBanner();
+      // 从Supabase加载用户上传的书籍
+      try{
+        const{data}=await db.from('books').select('*');
+        if(data) data.forEach(b=>{if(!PRELOAD[b.id]) books.push({id:b.id,title:b.title,author:b.author,genre:b.genre,cover:b.cover||'📖',desc:b.description||'',wordCount:b.word_count||0,isUploaded:true,uploaderId:b.uploader_id});});
+      }catch(e){console.warn('Load books failed:',e.message);dbOnline=false;updateDBStatus('offline');}
+    }else{
+      showOfflineBanner();
+    }
+  }else{
+    updateDBStatus('offline');
+    showOfflineBanner();
+  }
   if(filterTag!=='all') books=books.filter(b=>b.genre===filterTag);
   document.getElementById('bookGrid').innerHTML=books.map(b=>{
     return'<div class="book-card" onclick="openB(\''+b.id+'\')">'
@@ -599,6 +679,11 @@ let curBook=null,curLang='en',editIdx=null,commVersions={},commComments={},realt
 async function openB(id){
   let book=PRELOAD[id];
   if(!book){
+    // 非预置书需要数据库，先检查在线状态
+    if(!db||!dbOnline){
+      alert('📚 此书籍数据存储在云端，数据库当前离线。\n\n预置的6本书籍（小王子、边城、斗破苍穹、全职高手等）仍可正常阅读。\n\n请等待数据库恢复后重试。');
+      return;
+    }
     if(db){try{
       const{data:bData}=await db.from('books').select('*').eq('id',id).single();
       if(bData){
@@ -954,7 +1039,7 @@ function nextChapter(){
 }
 
 async function loadCloudVersions(){
-  if(!db)return;
+  if(!db||!dbOnline)return;
   try{
     const allVers=[];let hasMore=true,offset=0;
     while(hasMore){
@@ -963,25 +1048,27 @@ async function loadCloudVersions(){
       if(!data||data.length<1000)hasMore=false;
     }
     allVers.forEach(v=>{const k=v.paragraph_index+'-'+curLang;if(!commVersions[k])commVersions[k]=[];commVersions[k].push(v);});
-  }catch(e){console.warn('Load versions failed');}
+  }catch(e){console.warn('Load versions failed:',e.message);dbOnline=false;updateDBStatus('offline');}
 }
 async function loadComments(){
-  if(!db)return;
+  if(!db||!dbOnline)return;
   try{const{data}=await db.from('comments').select('*').eq('book_id',curBook.id).order('created_at',{ascending:true});
-  if(data){data.forEach(c=>{const k=c.paragraph_index;if(!commComments[k])commComments[k]=[];commComments[k].push(c);});}}catch(e){console.warn('Load comments failed');}
+  if(data){data.forEach(c=>{const k=c.paragraph_index;if(!commComments[k])commComments[k]=[];commComments[k].push(c);});}}catch(e){console.warn('Load comments failed:',e.message);}
 }
 
 function subscribeRealtime(){
-  if(!db)return;
-  if(realtimeChannel)db.removeChannel(realtimeChannel);
-  realtimeChannel=db.channel('rb-'+curBook.id)
-    .on('postgres_changes',{event:'INSERT',schema:'public',table:'translations',filter:'book_id=eq.'+curBook.id},async()=>{
-      await loadCloudVersions();renderR();showReport();
-    })
-    .on('postgres_changes',{event:'INSERT',schema:'public',table:'comments',filter:'book_id=eq.'+curBook.id},async()=>{
-      await loadComments();renderR();
-    })
-    .subscribe();
+  if(!db||!dbOnline)return;
+  try{
+    if(realtimeChannel)db.removeChannel(realtimeChannel);
+    realtimeChannel=db.channel('rb-'+curBook.id)
+      .on('postgres_changes',{event:'INSERT',schema:'public',table:'translations',filter:'book_id=eq.'+curBook.id},async()=>{
+        await loadCloudVersions();renderR();showReport();
+      })
+      .on('postgres_changes',{event:'INSERT',schema:'public',table:'comments',filter:'book_id=eq.'+curBook.id},async()=>{
+        await loadComments();renderR();
+      })
+      .subscribe();
+  }catch(e){console.warn('Realtime subscribe failed:',e.message);}
 }
 
 // 用户版本选择偏好（localStorage存储）
@@ -1281,15 +1368,17 @@ function escapeHtml(s){const d=document.createElement('div');d.textContent=s;ret
 // ============================================================
 document.addEventListener('DOMContentLoaded',async()=>{
   document.documentElement.style.setProperty('--fs','17px');
+  
   // 清理旧localStorage缓存
   try{const keys=Object.keys(localStorage);for(const k of keys){if(k.startsWith('rb_raw_'))localStorage.removeItem(k);}}catch(e){}
-  // 5秒超时：如果Supabase还未连接，标记离线
-  setTimeout(()=>{const s=document.getElementById('dbStatus');if(s&&s.textContent.includes('连接中')){s.textContent='⚠ 离线';s.style.color='#f59e0b';}},5000);
+  
   // 尝试恢复session（不阻塞页面加载）
   if(db){
     try{const{data}=await db.auth.getSession();if(data.session){session=data.session;await loadProfile();}}catch(e){}
   }
-  renderNav();await renderLib();
+  
+  renderNav();
+  await renderLib();  // renderLib() 内部调用 checkDBOnline()
   // 处理URL中的#book=参数（支持直接链接到某本书）
   const hash=location.hash;if(hash.startsWith('#book=')){const id=hash.replace('#book=','');setTimeout(()=>openB(id),500);}
   // 翻译粘贴框实时监听
