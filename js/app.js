@@ -466,7 +466,13 @@ async function translatePara(i){
       }catch(e){}
     }
     if(!trans){if(btn){btn.disabled=false;btn.textContent='🌐 翻译此段';}alert('翻译失败，请稍后重试');return;}
-    await db.from('translations').insert({book_id:curBook.id,paragraph_index:i,language:curLang,version:1,author_name:'AI',content:trans});
+    // 通过 Edge Function API 保存（绕过速率限制：AI翻译标记为 author_name='AI'）
+    const resp=await fetch(API_BASE+'/upload-translation',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+session.access_token},
+      body:JSON.stringify({book_id:curBook.id,paragraph_index:i,language:curLang,content:trans})
+    });
+    if(!resp.ok){const r=await resp.json();throw new Error(r.error);}
     await loadCloudVersions();renderR();showReport();
   }catch(e){alert('翻译失败：'+e.message);if(btn){btn.disabled=false;btn.textContent='🌐 翻译此段';}}
 }
@@ -1247,10 +1253,16 @@ function openComment(i){
 async function voteTranslation(i,val,btn){
   if(!session){alert('请先登录');return;}
   const v=getActive(i,curLang);if(!v||!v.id){return;}
-  const{data:existing}=await db.from('translation_votes').select('*').eq('translation_id',v.id).eq('voter_id',session.user.id).single();
-  if(existing&&existing.vote===val){await db.from('translation_votes').delete().eq('id',existing.id);}
-  else{await db.from('translation_votes').upsert({translation_id:v.id,voter_id:session.user.id,vote:val},{onConflict:'translation_id,voter_id'});}
-  loadVoteCounts();
+  // 通过 Edge Function API 投票
+  try{
+    const resp=await fetch(API_BASE+'/upload-vote',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+session.access_token},
+      body:JSON.stringify({translation_id:v.id,vote:val})
+    });
+    if(!resp.ok){const r=await resp.json();alert('投票失败：'+r.error);return;}
+    loadVoteCounts();
+  }catch(e){alert('网络错误：'+e.message);}
 }
 async function loadVoteCounts(){
   if(!curBook||!db)return;
@@ -1351,13 +1363,17 @@ async function deleteBook(){
   if(!session){alert('请先登录');return;}
   if(curBook.uploaderId&&session.user.id!==curBook.uploaderId){alert('无权限：只有上传者可以删除此书');return;}
   if(!confirm('确定要删除《'+curBook.title+'》吗？此操作不可恢复。'))return;
-  if(db){try{
-    await db.from('translations').delete().eq('book_id',curBook.id);
-    await db.from('comments').delete().eq('book_id',curBook.id);
-    await db.from('books').delete().eq('id',curBook.id);
-  }catch(e){alert('数据库删除失败：'+e.message);return;}}
-  delete PRELOAD[curBook.id];
-  goLib();alert('✅ 已删除');
+  // 通过 Edge Function API 删除
+  try{
+    const resp=await fetch(API_BASE+'/delete-book',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+session.access_token},
+      body:JSON.stringify({book_id:curBook.id})
+    });
+    if(!resp.ok){const r=await resp.json();alert('删除失败：'+r.error);return;}
+    delete PRELOAD[curBook.id];
+    goLib();alert('✅ 已删除');
+  }catch(e){alert('网络错误：'+e.message);}
 }
 
 // 浏览器返回键拦截
