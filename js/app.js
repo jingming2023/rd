@@ -10,6 +10,7 @@
 // ============================================================
 const SUPABASE_URL = 'https://hgdmyrkdxcnduxhbezfd.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_bXidjI4JfQ3r224M2cRcLw_1gNSpo0C';
+const API_BASE = SUPABASE_URL + '/functions/v1';  // Edge Functions API 网关
 
 // ========== 下载原文（输出标准化版本）==========
 function downloadBook(){
@@ -1216,17 +1217,22 @@ async function doEd(){
   if(editIdx===null)return;
   if(!requireDB())return;
   const t=document.getElementById('edT').value.trim();if(!t){alert('请输入翻译');return;}
-  const vs=getVersions(editIdx,curLang);
-  const authorName=profile?.username||session.user.email;
-  const{error}=await db.from('translations').insert({
-    book_id:curBook.id,paragraph_index:editIdx,language:curLang,
-    version:vs.length+1,author_id:session.user.id,author_name:authorName,content:t
-  });
-  if(error){alert('保存失败：'+error.message);return;}
-  // 更新贡献计数
-  await db.from('profiles').update({contributions:(profile?.contributions||0)+1}).eq('id',session.user.id);
-  await loadCloudVersions();
-  closeEd();renderR();showReport();
+  
+  // 通过 Edge Function API 提交（含速率限制+内容校验）
+  try{
+    const resp=await fetch(API_BASE+'/upload-translation',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+session.access_token},
+      body:JSON.stringify({book_id:curBook.id,paragraph_index:editIdx,language:curLang,content:t})
+    });
+    const result=await resp.json();
+    if(!resp.ok){alert('提交失败：'+result.error);return;}
+    
+    // 更新贡献计数
+    await db.from('profiles').update({contributions:(profile?.contributions||0)+1}).eq('id',session.user.id);
+    await loadCloudVersions();
+    closeEd();renderR();showReport();
+  }catch(e){alert('网络错误：'+e.message);}
 }
 
 // ============================================================
@@ -1263,14 +1269,20 @@ async function doComment(i){
   if(!requireDB())return;
   const input=document.getElementById('commentInput'+i);
   const t=input.value.trim();if(!t)return;
-  const authorName=profile?.username||session.user.email;
-  const{error}=await db.from('comments').insert({
-    book_id:curBook.id,paragraph_index:i,author_id:session.user.id,author_name:authorName,content:t
-  });
-  if(error){alert('评论失败：'+error.message);return;}
-  input.value='';
-  await loadComments();
-  renderR();
+  
+  // 通过 Edge Function API 提交评论
+  try{
+    const resp=await fetch(API_BASE+'/upload-comment',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+session.access_token},
+      body:JSON.stringify({book_id:curBook.id,paragraph_index:i,content:t})
+    });
+    const result=await resp.json();
+    if(!resp.ok){alert('评论失败：'+result.error);return;}
+    input.value='';
+    await loadComments();
+    renderR();
+  }catch(e){alert('网络错误：'+e.message);}
 }
 
 // ============================================================
