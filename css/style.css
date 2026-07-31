@@ -612,7 +612,7 @@ button {
   border-radius: 2px;
 }
 
-/* ========== 响应式 ========== */
+/* ========== 响应式：平板 (≤768px) ========== */
 @media (max-width: 768px) {
   .book-grid {
     grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
@@ -645,5 +645,120 @@ button {
   .modal .box {
     width: 96vw;
     padding: 14px;
+  }
+
+  /* 移动端：段落操作按钮始终可见（无法hover） */
+  .para .ptool {
+    display: flex;
+    position: static;
+    margin-top: 6px;
+  }
+}
+
+/* ========== 响应式：手机 (≤480px) ========== */
+@media (max-width: 480px) {
+  /* 英雄卡垂直堆叠 */
+  #heroCards {
+    flex-direction: column;
+    align-items: center;
+  }
+  #heroCards > div {
+    width: 100%;
+    max-width: 280px;
+  }
+
+  /* 触控目标放大至44px（Apple HIG标准） */
+  .btn {
+    min-height: 40px;
+    padding: 8px 14px;
+    font-size: 0.85em;
+  }
+  .btn.sm {
+    min-height: 36px;
+    padding: 6px 11px;
+    font-size: 0.78em;
+  }
+
+  /* 工具栏：书名省略 + 按钮缩小间距 */
+  .reader-top {
+    padding: 5px 6px;
+    gap: 4px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .reader-top #rbTitle {
+    max-width: 80px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.75em;
+  }
+  .reader-top > span[style*="flex:1"] {
+    display: none;
+  }
+  /* 语言切换按钮缩小 */
+  .reader-top button[onclick*="setL"] {
+    padding: 3px 5px !important;
+    font-size: 0.7em !important;
+  }
+
+  /* 目录面板：全屏覆盖 */
+  #tocPanel {
+    width: 85vw !important;
+    max-width: 300px;
+    box-shadow: -4px 0 16px rgba(0,0,0,0.2);
+  }
+
+  /* 弹窗：全屏 */
+  .modal .box {
+    width: 100vw;
+    max-width: 100vw;
+    height: 100vh;
+    max-height: 100vh;
+    border-radius: 0;
+    padding: 16px 12px;
+  }
+  /* 弹窗按钮固定在底部 */
+  .modal .acts {
+    position: sticky;
+    bottom: 0;
+    background: var(--pbg);
+    padding: 10px 0;
+    margin-top: auto;
+  }
+  /* 编辑弹窗textarea在键盘弹出时可滚动 */
+  .modal .box textarea {
+    max-height: 200px;
+    font-size: 16px;  /* 防止iOS缩放 */
+  }
+  .modal .box input {
+    font-size: 16px;  /* 防止iOS缩放 */
+  }
+
+  /* 阅读报告：单列 */
+  .report-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+  }
+
+  /* 评论输入框全宽 */
+  .comment-input-row {
+    flex-direction: column;
+    gap: 4px;
+  }
+  .comment-input-row input {
+    font-size: 16px;  /* 防止iOS缩放 */
+  }
+
+  /* 段落字体在手机端稍大 */
+  .para {
+    font-size: var(--fs, 1.05em);
+    padding: 8px 8px;
+  }
+
+  /* 段落段落号更紧凑 */
+  .para .n {
+    font-size: 0.65em;
   }
 }
