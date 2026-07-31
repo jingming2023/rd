@@ -375,6 +375,7 @@ function openAuth(mode){
   document.getElementById('authBtn').textContent=mode==='login'?'登录':'注册';
   document.getElementById('authToggle').textContent=mode==='login'?'没有账号？去注册':'已有账号？去登录';
   document.getElementById('authName').style.display=mode==='login'?'none':'block';
+  document.getElementById('authResend').style.display=mode==='login'?'inline-flex':'none';
   document.getElementById('authModal').classList.add('on');
 }
 function toggleAuth(){closeAuth();openAuth(authMode==='login'?'register':'login');}
@@ -385,14 +386,29 @@ async function doAuth(){
   const pass=document.getElementById('authPass').value;
   const name=document.getElementById('authName').value.trim();
   if(!email||!pass){alert('请填写邮箱和密码');return;}
+  // 邮箱基本格式校验
+  if(!email.includes('@')||!email.includes('.')){alert('请输入有效的邮箱地址');return;}
   if(pass.length<6){alert('密码至少6位');return;}
+  if(authMode==='register'&&(pass.length<8||!/[a-zA-Z]/.test(pass)||!/\d/.test(pass))){
+    if(!confirm('密码安全度较低（建议8位以上，含字母+数字）。\n\n是否继续使用当前密码？'))return;
+  }
   const btn=document.getElementById('authBtn');btn.disabled=true;btn.textContent='⏳ 处理中...';
   let r;
   try{
     if(authMode==='login'){
       r=await db.auth.signInWithPassword({email,password:pass});
       btn.disabled=false;btn.textContent='登录';
-      if(r.error){alert('登录失败：'+r.error.message);return;}
+      if(r.error){
+        var errMsg=r.error.message||'';
+        if(errMsg.includes('Invalid login')||errMsg.includes('Invalid'||errMsg.includes('invalid'))){
+          alert('邮箱或密码错误，请重试。');
+        }else if(errMsg.includes('not confirmed')||errMsg.includes('verify')||errMsg.includes('confirmation')){
+          alert('📧 邮箱尚未验证！\n\n请检查收件箱（含垃圾邮件），点击验证链接后再登录。\n\n如未收到邮件，请点击"重发验证邮件"。');
+        }else{
+          alert('登录失败：'+errMsg);
+        }
+        return;
+      }
       session=r.data.session;
       closeAuth();await loadProfile();renderNav();renderLib();
     }else{
@@ -402,13 +418,28 @@ async function doAuth(){
       if(r.error){alert('注册失败：'+r.error.message);return;}
       if(r.data.user){try{await db.from('profiles').insert({id:r.data.user.id,username:name});}catch(e){}}
       if(r.data.session){
+        // 邮箱验证未开启 → 直接登录
         session=r.data.session;closeAuth();await loadProfile();renderNav();renderLib();
         alert('注册成功！欢迎 '+name+'！');
       }else{
-        closeAuth();alert('注册成功！现在请切换到登录界面\n用刚才的邮箱和密码登录。');
+        // 邮箱验证已开启 → 需要用户去邮箱点击验证链接
+        closeAuth();
+        alert('📧 验证邮件已发送至 '+email+'\n\n请检查收件箱（含垃圾邮件），点击链接完成验证。\n\n验证后即可登录。');
       }
     }
   }catch(e){btn.disabled=false;btn.textContent=authMode==='login'?'登录':'注册';alert('操作失败：'+e.message);}
+}
+
+// 重发验证邮件
+async function resendVerification(){
+  const email=document.getElementById('authEmail').value.trim();
+  if(!email||!email.includes('@')){alert('请先输入有效的邮箱地址');return;}
+  if(!dbOnline){alert('网络未连接');return;}
+  try{
+    const{error}=await db.auth.resend({type:'signup',email:email});
+    if(error){alert('发送失败：'+error.message);return;}
+    alert('✅ 验证邮件已重新发送至 '+email+'\n\n请检查收件箱（含垃圾邮件）。');
+  }catch(e){alert('发送失败：'+e.message);}
 }
 async function doLogout(){if(db)await db.auth.signOut();session=null;profile=null;renderNav();renderLib();}
 async function loadProfile(){
@@ -1382,5 +1413,6 @@ window.escapeHtml = escapeHtml;
 window.filter = filter;
 window.renderNav = renderNav;
 window.renderLib = renderLib;
+window.resendVerification = resendVerification;
 
 })();
