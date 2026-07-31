@@ -74,16 +74,18 @@ function showTransMatch(){
 async function doTransUp(){
   if(!transUpText||!transUpParas){alert('请先选择翻译文件或粘贴译文');return;}
   if(!curBook||!curBook.zh){alert('请先打开一本书');return;}
+  if(!dbOnline){alert('数据库离线，无法上传翻译。');return;}
+  
   var orig=curBook.zh.length,trans=transUpParas.length;
   // 放宽限制：章节锚点匹配或段落数接近
   var origAnchors=extractChapterAnchors(curBook.zh);
   var transAnchors=extractChapterAnchors(transUpParas);
   var anchorOk=origAnchors.length>0&&Math.abs(origAnchors.length-transAnchors.length)<=2;
   if(!anchorOk&&Math.abs(orig-trans)>15&&orig>20){alert('段落数差异过大（原文'+orig+'段，翻译'+trans+'段），请确保翻译保持了相同的段落结构。\n\n章节锚点数：原文'+origAnchors.length+'个，翻译'+transAnchors.length+'个。');return;}
-  if(!db){alert('数据库未连接');return;}
+  
   try{
-    // 章节对齐上传：优先按锚点映射
-    var count=Math.min(orig,trans);
+    // 构建段落映射（章节锚点对齐 或 序号对齐）
+    var items=[];
     if(anchorOk&&origAnchors.length===transAnchors.length){
       // 章内段落等比例映射
       for(var a=0;a<origAnchors.length;a++){
@@ -95,24 +97,31 @@ async function doTransUp(){
         for(var k=0;k<Math.min(origLen,transLen);k++){
           var oi=origStart+k;
           var ti=transStart+Math.round(k*(transLen/Math.max(origLen,1)));
-          if(oi<orig&&ti<trans){
-            // 批量插入
-            var batch=[];
-            batch.push({book_id:curBook.id,paragraph_index:oi,language:'en',version:1,author_name:profile?profile.username:'AI',content:transUpParas[ti]});
-            await db.from('translations').insert(batch);
-          }
+          if(oi<orig&&ti<trans) items.push({paragraph_index:oi,content:transUpParas[ti]});
         }
       }
     }else{
       // 退化为序号对齐
-      for(var i=0;i<count;i+=100){
-        var batch=[];
-        for(var j=i;j<Math.min(i+100,count);j++){batch.push({book_id:curBook.id,paragraph_index:j,language:'en',version:1,author_name:profile?profile.username:'AI',content:transUpParas[j]});}
-        await db.from('translations').insert(batch);
-      }
+      var count=Math.min(orig,trans);
+      for(var i=0;i<count;i++) items.push({paragraph_index:i,content:transUpParas[i]});
     }
+    
+    // 分批发送到 Edge Function（每批最多500段）
+    var totalInserted=0;
+    for(var b=0;b<items.length;b+=500){
+      var batch=items.slice(b,b+500);
+      var resp=await fetch(API_BASE+'/upload-batch-translation',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+session.access_token},
+        body:JSON.stringify({book_id:curBook.id,language:'en',items:batch})
+      });
+      var result=await resp.json();
+      if(!resp.ok) throw new Error(result.error||'上传失败');
+      totalInserted+=result.inserted||batch.length;
+    }
+    
     closeTransUp();await loadCloudVersions();renderR();showReport();
-    alert('✅ 翻译上传成功！共'+count+'段译文已导入。');
+    alert('✅ 翻译上传成功！共'+totalInserted+'段译文已导入。');
   }catch(e){alert('上传失败：'+e.message);}
 }
 
