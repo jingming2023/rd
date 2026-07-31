@@ -1,8 +1,11 @@
 /* ============================================================
    语桥 ReadBridge — 主应用逻辑
-   版本: v1.2 (重构拆分)
+   版本: v1.7 (IIFE封装)
+   
+   架构: IIFE 包裹全局状态 → 仅暴露 HTML onclick 需要的函数到 window
    ============================================================ */
 
+(function() {
 'use strict';
 
 // ============================================================
@@ -1426,3 +1429,47 @@ document.addEventListener('DOMContentLoaded',async()=>{
   });
 });
 window.onerror=function(msg,url,line){console.error('[Error '+new Date().toLocaleTimeString()+'] '+msg+' line '+line);return false;};
+
+// ============================================================
+// 暴露 HTML onclick 需要的函数到全局 window
+// ============================================================
+window.goLib = goLib;
+window.flashFirstBook = flashFirstBook;
+window.openB = openB;
+window.openUp = openUp;
+window.setL = setL;
+window.downloadBook = downloadBook;
+window.openTransUp = openTransUp;
+window.deleteBook = deleteBook;
+window.copyPrompt = copyPrompt;
+window.previewTransFile = previewTransFile;
+window.doAuth = doAuth;
+window.closeAuth = closeAuth;
+window.toggleAuth = toggleAuth;
+window.doEd = doEd;
+window.closeEd = closeEd;
+window.openVr = openVr;
+window.closeVr = closeVr;
+window.setActiveV = setActiveV;
+window.openProf = openProf;
+window.closeProf = closeProf;
+window.doUp = doUp;
+window.closeUp = closeUp;
+window.doTransUp = doTransUp;
+window.closeTransUp = closeTransUp;
+window.doLogout = doLogout;
+window.toggleTheme = toggleTheme;
+window.openComment = openComment;
+window.doComment = doComment;
+window.voteTranslation = voteTranslation;
+window.translatePara = translatePara;
+window.prevChapter = prevChapter;
+window.nextChapter = nextChapter;
+window.scrollToPara = scrollToPara;
+window.toggleSubs = toggleSubs;
+window.escapeHtml = escapeHtml;
+window.filter = filter;
+window.renderNav = renderNav;
+window.renderLib = renderLib;
+
+})();
