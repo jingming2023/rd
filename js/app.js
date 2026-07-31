@@ -388,8 +388,8 @@ async function doAuth(){
   if(!email||!pass){alert('请填写邮箱和密码');return;}
   // 邮箱基本格式校验
   if(!email.includes('@')||!email.includes('.')){alert('请输入有效的邮箱地址');return;}
-  if(pass.length<6){alert('密码至少6位');return;}
-  if(authMode==='register'&&(pass.length<8||!/[a-zA-Z]/.test(pass)||!/\d/.test(pass))){
+  if(pass.length<8){alert('密码至少8位');return;}
+  if(authMode==='register'&&(pass.length<10||!/[a-zA-Z]/.test(pass)||!/\d/.test(pass))){
     if(!confirm('密码安全度较低（建议8位以上，含字母+数字）。\n\n是否继续使用当前密码？'))return;
   }
   const btn=document.getElementById('authBtn');btn.disabled=true;btn.textContent='⏳ 处理中...';
