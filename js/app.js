@@ -1381,6 +1381,7 @@ window.doAuth = doAuth;
 window.closeAuth = closeAuth;
 window.toggleAuth = toggleAuth;
 window.doEd = doEd;
+window.openEd = openEd;
 window.closeEd = closeEd;
 window.openVr = openVr;
 window.closeVr = closeVr;
