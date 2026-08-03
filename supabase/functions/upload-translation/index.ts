@@ -122,6 +122,19 @@ serve(async (req: Request) => {
       return jsonResponse(500, { error: "保存失败: " + insertError.message });
     }
 
+    // 更新贡献计数（仅人工改进时 +1，AI初稿不计）
+    if (username !== "AI") {
+      const { data: prof } = await supabase
+        .from("profiles")
+        .select("contributions")
+        .eq("id", user.id)
+        .maybeSingle();
+      await supabase
+        .from("profiles")
+        .update({ contributions: (prof?.contributions || 0) + 1 })
+        .eq("id", user.id);
+    }
+
     return jsonResponse(200, {
       success: true,
       version: nextVersion,

@@ -416,7 +416,7 @@ async function doAuth(){
       r=await db.auth.signUp({email,password:pass,options:{data:{username:name}}});
       btn.disabled=false;btn.textContent='注册';
       if(r.error){alert('注册失败：'+r.error.message);return;}
-      if(r.data.user){try{await db.from('profiles').insert({id:r.data.user.id,username:name});}catch(e){}}
+      // profile 由 Edge Function 首次写操作时自动创建（无需前端直插）
       if(r.data.session){
         // 邮箱验证未开启 → 直接登录
         session=r.data.session;closeAuth();await loadProfile();renderNav();renderLib();
@@ -550,23 +550,16 @@ async function doUp(btn){
     const paras=smartSplit(text);
     if(paras.length===0){alert('未能识别段落');uploading=false;if(btn){btn.disabled=false;btn.textContent='📤 上传';}return;}
 
-    // 不再存localStorage（避免quota超限），Supabase是可靠数据源
-    if(db){
+    // 通过 Edge Function 上传（含速率限制+参数校验+批量写入）
+    if(dbOnline){
       if(btn)btn.textContent='⏳ 存入云端...';
-      await db.from('books').insert({id:bookId,title,author,genre,cover:'📖',description:text.substring(0,5000),word_count:text.length,uploader_id:session.user.id});
-      for(let i=0;i<paras.length;i+=100){
-        if(btn)btn.textContent='⏳ '+(Math.min(i+100,paras.length))+'/'+paras.length+' 段...';
-        const batch=paras.slice(i,i+100).map((p,j)=>({book_id:bookId,paragraph_index:i+j,language:'zh',version:1,author_name:'AI',content:p}));
-        const{error:insErr}=await db.from('translations').insert(batch);
-        if(insErr){console.warn('Batch '+i+' insert error:',insErr);throw new Error('写入失败：'+insErr.message);}
-      }
-      // 验证写入：从数据库读回确认
-      if(btn)btn.textContent='⏳ 验证数据...';
-      await new Promise(r=>setTimeout(r,1000));
-      const{data:check}=await db.from('translations').select('paragraph_index').eq('book_id',bookId).eq('language','zh').limit(3);
-      if(!check||check.length===0){
-        throw new Error('数据验证失败：写入后无法读回。请检查网络后重试。');
-      }
+      const resp=await fetch(API_BASE+'/upload-book',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+session.access_token},
+        body:JSON.stringify({book_id:bookId,title,author,genre,paragraphs:paras})
+      });
+      const result=await resp.json();
+      if(!resp.ok){throw new Error(result.error||'上传失败');}
     }
 
     PRELOAD[bookId]={title,author,genre,cover:'📖',desc:'用户上传 · 等待社区翻译',wordCount:text.length,zh:paras,en:paras.map(()=>'')};
@@ -1179,8 +1172,7 @@ async function doEd(){
     const result=await resp.json();
     if(!resp.ok){alert('提交失败：'+result.error);return;}
     
-    // 更新贡献计数
-    await db.from('profiles').update({contributions:(profile?.contributions||0)+1}).eq('id',session.user.id);
+    // 贡献计数由 Edge Function 内部更新（前端不再直写数据库）
     await loadCloudVersions();
     closeEd();renderR();showReport();
   }catch(e){alert('网络错误：'+e.message);}

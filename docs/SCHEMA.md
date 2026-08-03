@@ -5,6 +5,10 @@
 
 ## RLS 策略 (必须手动在 Supabase Dashboard 执行)
 
+> ⚠️ **重要：** 2026-07 修复外键问题时，数据库中的 insert 策略曾被临时放宽为 `WITH CHECK (true)`（文档未同步）。
+> **当前数据库状态与下面文档不一致**，请执行 `docs/RLS-FIX.sql` 中的 ① 恢复严格策略。
+> 所有 Edge Function 已使用 service_role key（绕过 RLS），收紧 RLS 不影响网关功能。
+
 ```sql
 -- 1. 启用所有表的RLS
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
