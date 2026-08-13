@@ -24,3 +24,5 @@ Thumbs.db
 
 # Supabase
 supabase/.temp/
+node_modules/
+package-lock.json
